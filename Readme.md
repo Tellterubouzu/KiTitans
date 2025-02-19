@@ -1,0 +1,2 @@
+# KiTitans Project(期待たん　プロジェクト)
+ふざけた名前のように見えて，Kyusyu Institute of Technologyで勝手にやってるDeepMindがつくったTitansをつかってLLMをつくってみようの会 のリポジトリ
