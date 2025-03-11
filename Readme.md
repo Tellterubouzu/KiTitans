@@ -15,18 +15,17 @@ optimizer →どうせならMoun optimizerやってみる？
 
 
 
-## アーキテクチャ
-* Memory as Context Transformer
-ウィンドウサイズ128
-Neueal Memory セグメント長さ16
-永続メモリトークン8
-長期メモリトークン9
-語彙数:102400
-隠れ層サイズ:1120
-Transformer層数22層
-Attentionヘッド14
-FFN拡張率3
-Neural Memory module:3,6,9,12,15,18,21
+## アーキテクチャ :Memory as Context Transformer
+* ウィンドウサイズ128
+* Neueal Memory セグメント長さ16
+* 永続メモリトークン8
+* 長期メモリトークン9
+* 語彙数:102400
+* 隠れ層サイズ:1120
+* Transformer層数22層
+* Attentionヘッド14
+* FFN拡張率3
+* Neural Memory module:3,6,9,12,15,18,21
 
 ## Kititans Flow -Chart
 
