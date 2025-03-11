@@ -1,0 +1,30 @@
+// MACTransformer Flowchart
+digraph {
+	A [label="入力トークン
+(Input Tokens)"]
+	B [label="正規化処理
+(Normalization)"]
+	C [label="NeuralMemory更新
+(mem.forward)"]
+	D [label="線形変換
+(Linear Projection)
+→ Q, K, V"]
+	E [label="ヘッド分割
+(Split Heads)"]
+	F [label="永続メモリ結合
+(Concatenate Persistent Memory)"]
+	G [label="アテンション計算
+(Attention Computation)"]
+	H [label="ヘッド結合
+(Merge Heads)"]
+	I [label="出力生成
+(Output Generation)"]
+	A -> B [label="Step 1"]
+	B -> C [label="Step 2"]
+	C -> D [label="Step 3"]
+	D -> E [label="Step 4"]
+	E -> F [label="Step 5"]
+	F -> G [label="Step 6"]
+	G -> H [label="Step 7"]
+	H -> I [label="Step 8"]
+}
