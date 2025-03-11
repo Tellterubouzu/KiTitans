@@ -1,0 +1,23 @@
+2025-03-11 19:31:11,084 INFO    MainThread:226072 [wandb_setup.py:_flush():67] Current SDK version is 0.19.8
+2025-03-11 19:31:11,084 INFO    MainThread:226072 [wandb_setup.py:_flush():67] Configure stats pid to 226072
+2025-03-11 19:31:11,084 INFO    MainThread:226072 [wandb_setup.py:_flush():67] Loading settings from /home/shimomura/.config/wandb/settings
+2025-03-11 19:31:11,084 INFO    MainThread:226072 [wandb_setup.py:_flush():67] Loading settings from /mnt/shimo/KiTitans/Pretrain/wandb/settings
+2025-03-11 19:31:11,084 INFO    MainThread:226072 [wandb_setup.py:_flush():67] Loading settings from environment variables
+2025-03-11 19:31:11,086 INFO    MainThread:226072 [wandb_init.py:setup_run_log_directory():647] Logging user logs to /mnt/shimo/KiTitans/Pretrain/wandb/run-20250311_193111-mpheqoo1/logs/debug.log
+2025-03-11 19:31:11,086 INFO    MainThread:226072 [wandb_init.py:setup_run_log_directory():648] Logging internal logs to /mnt/shimo/KiTitans/Pretrain/wandb/run-20250311_193111-mpheqoo1/logs/debug-internal.log
+2025-03-11 19:31:11,086 INFO    MainThread:226072 [wandb_init.py:init():761] calling init triggers
+2025-03-11 19:31:11,086 INFO    MainThread:226072 [wandb_init.py:init():766] wandb.init called with sweep_config: {}
+config: {'_wandb': {}}
+2025-03-11 19:31:11,087 INFO    MainThread:226072 [wandb_init.py:init():784] starting backend
+2025-03-11 19:31:11,087 INFO    MainThread:226072 [wandb_init.py:init():788] sending inform_init request
+2025-03-11 19:31:11,091 INFO    MainThread:226072 [backend.py:_multiprocessing_setup():101] multiprocessing start_methods=fork,spawn,forkserver, using: spawn
+2025-03-11 19:31:11,091 INFO    MainThread:226072 [wandb_init.py:init():798] backend started and connected
+2025-03-11 19:31:11,093 INFO    MainThread:226072 [wandb_init.py:init():891] updated telemetry
+2025-03-11 19:31:11,156 INFO    MainThread:226072 [wandb_init.py:init():915] communicating run to backend with 90.0 second timeout
+2025-03-11 19:31:11,577 INFO    MainThread:226072 [wandb_init.py:init():990] starting run threads in backend
+2025-03-11 19:31:11,657 INFO    MainThread:226072 [wandb_run.py:_console_start():2375] atexit reg
+2025-03-11 19:31:11,657 INFO    MainThread:226072 [wandb_run.py:_redirect():2227] redirect: wrap_raw
+2025-03-11 19:31:11,657 INFO    MainThread:226072 [wandb_run.py:_redirect():2292] Wrapping output streams.
+2025-03-11 19:31:11,657 INFO    MainThread:226072 [wandb_run.py:_redirect():2315] Redirects installed.
+2025-03-11 19:31:11,658 INFO    MainThread:226072 [wandb_init.py:init():1032] run started, returning control to user process
+2025-03-11 19:31:16,225 INFO    MsgRouterThr:226072 [mailbox.py:close():129] Closing mailbox, abandoning 1 handles.

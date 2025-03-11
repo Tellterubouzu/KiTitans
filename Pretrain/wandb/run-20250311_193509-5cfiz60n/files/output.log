@@ -1,0 +1,35 @@
+[34m[1mwandb[0m: [33mWARNING[0m Calling wandb.run.save without any arguments is deprecated.Changes to attributes are automatically persisted.
+Found 82 files for patterns: ['/mnt/shimo/Pretrain_corpus/en_wiki/train_*.jsonl.gz', '/mnt/shimo/Pretrain_corpus/ja_wiki/train_*.jsonl.gz', '/mnt/shimo/Pretrain_corpus/level0/CC-MAIN-2013-2016.jsonl.gz']
+Found 1 files for patterns: ['/mnt/shimo/Pretrain_corpus/en_wiki/validation_0.jsonl.gz']
+Found 1 files for patterns: ['/mnt/shimo/Pretrain_corpus/ja_wiki/validation_0.jsonl.gz']
+Traceback (most recent call last):
+  File "/mnt/shimo/KiTitans/Pretrain/train_mac_single_A100.py", line 165, in <module>
+    for batch in train_loader:
+  File "/home/shimomura/Devenv/env/lib/python3.11/site-packages/torch/utils/data/dataloader.py", line 708, in __next__
+    data = self._next_data()
+           ^^^^^^^^^^^^^^^^^
+  File "/home/shimomura/Devenv/env/lib/python3.11/site-packages/torch/utils/data/dataloader.py", line 1480, in _next_data
+    return self._process_data(data)
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/shimomura/Devenv/env/lib/python3.11/site-packages/torch/utils/data/dataloader.py", line 1505, in _process_data
+    data.reraise()
+  File "/home/shimomura/Devenv/env/lib/python3.11/site-packages/torch/_utils.py", line 733, in reraise
+    raise exception
+RuntimeError: Caught RuntimeError in DataLoader worker process 0.
+Original Traceback (most recent call last):
+  File "/home/shimomura/Devenv/env/lib/python3.11/site-packages/torch/utils/data/_utils/worker.py", line 349, in _worker_loop
+    data = fetcher.fetch(index)  # type: ignore[possibly-undefined]
+           ^^^^^^^^^^^^^^^^^^^^
+  File "/home/shimomura/Devenv/env/lib/python3.11/site-packages/torch/utils/data/_utils/fetch.py", line 43, in fetch
+    return self.collate_fn(data)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/shimomura/Devenv/env/lib/python3.11/site-packages/torch/utils/data/_utils/collate.py", line 398, in default_collate
+    return collate(batch, collate_fn_map=default_collate_fn_map)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/shimomura/Devenv/env/lib/python3.11/site-packages/torch/utils/data/_utils/collate.py", line 155, in collate
+    return collate_fn_map[elem_type](batch, collate_fn_map=collate_fn_map)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/shimomura/Devenv/env/lib/python3.11/site-packages/torch/utils/data/_utils/collate.py", line 272, in collate_tensor_fn
+    return torch.stack(batch, 0, out=out)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: stack expects each tensor to be equal size, but got [675] at entry 0 and [1915] at entry 1

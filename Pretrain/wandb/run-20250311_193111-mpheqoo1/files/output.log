@@ -1,0 +1,31 @@
+[34m[1mwandb[0m: [33mWARNING[0m Calling wandb.run.save without any arguments is deprecated.Changes to attributes are automatically persisted.
+Found 82 files for patterns: ['/mnt/shimo/Pretrain_corpus/en_wiki/train_*.jsonl.gz', '/mnt/shimo/Pretrain_corpus/ja_wiki/train_*.jsonl.gz', '/mnt/shimo/Pretrain_corpus/level0/CC-MAIN-2013-2016.jsonl.gz']
+Found 1 files for patterns: ['/mnt/shimo/Pretrain_corpus/en_wiki/validation_0.jsonl.gz']
+Found 1 files for patterns: ['/mnt/shimo/Pretrain_corpus/ja_wiki/validation_0.jsonl.gz']
+Traceback (most recent call last):
+  File "/mnt/shimo/KiTitans/Pretrain/titans_pytorch/neural_memory.py", line 327, in __init__
+    mem_model_output = model(test_input)
+                       ^^^^^^^^^^^^^^^^^
+  File "/home/shimomura/Devenv/env/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1739, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/shimomura/Devenv/env/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1750, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/shimo/KiTitans/Pretrain/titans_pytorch/memory_models.py", line 80, in forward
+    x = x @ weight
+        ~~^~~~~~~~
+RuntimeError: mat1 and mat2 shapes cannot be multiplied (6x80 and 64x128)
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/mnt/shimo/KiTitans/Pretrain/train_mac_single_A100.py", line 104, in <module>
+    model = MemoryAsContextTransformer(
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/shimo/KiTitans/Pretrain/titans_pytorch/mac_transformer.py", line 577, in __init__
+    mem = NeuralMemory(
+          ^^^^^^^^^^^^^
+  File "/mnt/shimo/KiTitans/Pretrain/titans_pytorch/neural_memory.py", line 329, in __init__
+    raise RuntimeError(f'memory model unable to accept a tensor of shape {test_shape}')
+RuntimeError: memory model unable to accept a tensor of shape (3, 2, 80)

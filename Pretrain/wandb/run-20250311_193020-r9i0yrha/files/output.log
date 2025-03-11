@@ -1,0 +1,12 @@
+[34m[1mwandb[0m: [33mWARNING[0m Calling wandb.run.save without any arguments is deprecated.Changes to attributes are automatically persisted.
+Found 82 files for patterns: ['/mnt/shimo/Pretrain_corpus/en_wiki/train_*.jsonl.gz', '/mnt/shimo/Pretrain_corpus/ja_wiki/train_*.jsonl.gz', '/mnt/shimo/Pretrain_corpus/level0/CC-MAIN-2013-2016.jsonl.gz']
+Found 1 files for patterns: ['/mnt/shimo/Pretrain_corpus/en_wiki/validation_0.jsonl.gz']
+Found 1 files for patterns: ['/mnt/shimo/Pretrain_corpus/ja_wiki/validation_0.jsonl.gz']
+Traceback (most recent call last):
+  File "/mnt/shimo/KiTitans/Pretrain/train_mac_single_A100.py", line 96, in <module>
+    from titans_pytorch import MemoryAsContextTransformer, MemoryMLP, MemoryAttention
+  File "/mnt/shimo/KiTitans/Pretrain/titans_pytorch/__init__.py", line 15, in <module>
+    from titans_pytorch.mac_transformer import (
+  File "/mnt/shimo/KiTitans/Pretrain/titans_pytorch/mac_transformer.py", line 66, in <module>
+    from hyper_connections import get_init_and_expand_reduce_stream_functions
+ModuleNotFoundError: No module named 'hyper_connections'

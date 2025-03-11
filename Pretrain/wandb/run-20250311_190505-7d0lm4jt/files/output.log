@@ -1,0 +1,33 @@
+[34m[1mwandb[0m: [33mWARNING[0m Calling wandb.run.save without any arguments is deprecated.Changes to attributes are automatically persisted.
+Found 82 files for patterns: ['/mnt/shimo/Pretrain_corpus/en_wiki/train_*.jsonl.gz', '/mnt/shimo/Pretrain_corpus/ja_wiki/train_*.jsonl.gz', '/mnt/shimo/Pretrain_corpus/level0/CC-MAIN-2013-2016.jsonl.gz']
+Traceback (most recent call last):
+  File "/mnt/shimo/KiTitans/Pretrain/train_mac_single_A100.py", line 59, in <module>
+    train_dataset = CombinedJsonlGzDataset(train_file_patterns, seq_len=SEQ_LEN, tokenizer=tokenizer)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/shimo/KiTitans/Pretrain/train_mac_single_A100.py", line 31, in __init__
+    data = json.loads(line)
+           ^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/json/__init__.py", line 346, in loads
+    return _default_decoder.decode(s)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/json/decoder.py", line 337, in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/json/decoder.py", line 353, in raw_decode
+    obj, end = self.scan_once(s, idx)
+               ^^^^^^^^^^^^^^^^^^^^^^
+KeyboardInterrupt
+Exception ignored in atexit callback: <function _start_and_connect_service.<locals>.teardown_atexit at 0x152464f2df80>
+Traceback (most recent call last):
+  File "/home/shimomura/Devenv/env/lib/python3.11/site-packages/wandb/sdk/lib/service_connection.py", line 94, in teardown_atexit
+    conn.teardown(hooks.exit_code)
+  File "/home/shimomura/Devenv/env/lib/python3.11/site-packages/wandb/sdk/lib/service_connection.py", line 226, in teardown
+    self._router.join()
+  File "/home/shimomura/Devenv/env/lib/python3.11/site-packages/wandb/sdk/interface/router.py", line 75, in join
+    self._thread.join()
+  File "/usr/lib/python3.11/threading.py", line 1119, in join
+    self._wait_for_tstate_lock()
+  File "/usr/lib/python3.11/threading.py", line 1139, in _wait_for_tstate_lock
+    if lock.acquire(block, timeout):
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+KeyboardInterrupt:

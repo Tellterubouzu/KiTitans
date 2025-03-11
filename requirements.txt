@@ -7,3 +7,11 @@ torchaudio==2.6.0+cu126
 torchvision==2.6.0+cu126
 torch==2.6.0+cu126
 sentencepiece==0.2.0
+tensordict
+einx
+axial_positional_embedding
+rotary_embedding_torch
+x_transformers
+hyper_connections
+adam_atan2_pytorch
+accelerated_scan

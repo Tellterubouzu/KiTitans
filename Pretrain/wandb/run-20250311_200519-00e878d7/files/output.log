@@ -1,0 +1,78 @@
+[34m[1mwandb[0m: [33mWARNING[0m Calling wandb.run.save without any arguments is deprecated.Changes to attributes are automatically persisted.
+Found 82 files for patterns: ['/mnt/shimo/Pretrain_corpus/en_wiki/train_*.jsonl.gz', '/mnt/shimo/Pretrain_corpus/ja_wiki/train_*.jsonl.gz', '/mnt/shimo/Pretrain_corpus/level0/CC-MAIN-2013-2016.jsonl.gz']
+Found 1 files for patterns: ['/mnt/shimo/Pretrain_corpus/en_wiki/validation_0.jsonl.gz']
+Found 1 files for patterns: ['/mnt/shimo/Pretrain_corpus/ja_wiki/validation_0.jsonl.gz']
+Using /home/shimomura/.cache/torch_extensions/py311_cu126 as PyTorch extensions root...
+Detected CUDA files, patching ldflags
+Emitting ninja build file /home/shimomura/.cache/torch_extensions/py311_cu126/warpscan/build.ninja...
+Building extension module warpscan...
+Allowing ninja to set a default number of workers... (overridable by setting the environment variable MAX_JOBS=N)
+Loading extension module warpscan...
+Traceback (most recent call last):
+  File "/mnt/shimo/KiTitans/Pretrain/train_mac_single_A100.py", line 186, in <module>
+    loss = model(batch, return_loss=True)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/shimomura/Devenv/env/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1739, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/shimomura/Devenv/env/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1750, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/shimo/KiTitans/Pretrain/titans_pytorch/mac_transformer.py", line 815, in forward
+    retrieved, next_neural_mem_cache = mem.forward(
+                                       ^^^^^^^^^^^^
+  File "/mnt/shimo/KiTitans/Pretrain/titans_pytorch/neural_memory.py", line 965, in forward
+    next_updates, next_neural_mem_state, chunk_surprises = self.store_memories(
+                                                           ^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/shimo/KiTitans/Pretrain/titans_pytorch/neural_memory.py", line 734, in store_memories
+    momentum = self.assoc_scan(one_adaptive_momentum, momentum, prev = one_last_momentum) # momentum is S / surprise in the paper
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/shimomura/Devenv/env/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1739, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/shimomura/Devenv/env/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1750, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/shimo/KiTitans/Pretrain/titans_pytorch/associative_scan.py", line 173, in forward
+    out = accelerate_scan_fn(gates, inputs)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/shimo/KiTitans/Pretrain/titans_pytorch/associative_scan.py", line 166, in accelerate_scan_fn
+    outputs = scan(gates.contiguous(), inputs.contiguous())
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/shimomura/Devenv/env/lib/python3.11/site-packages/accelerated_scan/triton.py", line 129, in scan
+    return Scan.apply(gates, tokens)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/shimomura/Devenv/env/lib/python3.11/site-packages/torch/autograd/function.py", line 575, in apply
+    return super().apply(*args, **kwargs)  # type: ignore[misc]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/shimomura/Devenv/env/lib/python3.11/site-packages/accelerated_scan/triton.py", line 87, in forward
+    forward_scan[(B,C)](gates, tokens, states, SEQUENCE_LENGTH=T, enable_fp_fusion=False)
+  File "/home/shimomura/Devenv/env/lib/python3.11/site-packages/triton/runtime/jit.py", line 330, in <lambda>
+    return lambda *args, **kwargs: self.run(grid=grid, warmup=False, *args, **kwargs)
+                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/shimomura/Devenv/env/lib/python3.11/site-packages/triton/runtime/jit.py", line 568, in run
+    device = driver.active.get_current_device()
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/shimomura/Devenv/env/lib/python3.11/site-packages/triton/runtime/driver.py", line 23, in __getattr__
+    self._initialize_obj()
+  File "/home/shimomura/Devenv/env/lib/python3.11/site-packages/triton/runtime/driver.py", line 20, in _initialize_obj
+    self._obj = self._init_fn()
+                ^^^^^^^^^^^^^^^
+  File "/home/shimomura/Devenv/env/lib/python3.11/site-packages/triton/runtime/driver.py", line 9, in _create_driver
+    return actives[0]()
+           ^^^^^^^^^^^^
+  File "/home/shimomura/Devenv/env/lib/python3.11/site-packages/triton/backends/nvidia/driver.py", line 450, in __init__
+    self.utils = CudaUtils()  # TODO: make static
+                 ^^^^^^^^^^^
+  File "/home/shimomura/Devenv/env/lib/python3.11/site-packages/triton/backends/nvidia/driver.py", line 80, in __init__
+    mod = compile_module_from_src(Path(os.path.join(dirname, "driver.c")).read_text(), "cuda_utils")
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/shimomura/Devenv/env/lib/python3.11/site-packages/triton/backends/nvidia/driver.py", line 57, in compile_module_from_src
+    so = _build(name, src_path, tmpdir, library_dirs(), include_dir, libraries)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/shimomura/Devenv/env/lib/python3.11/site-packages/triton/runtime/build.py", line 50, in _build
+    ret = subprocess.check_call(cc_cmd)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/subprocess.py", line 413, in check_call
+    raise CalledProcessError(retcode, cmd)
+subprocess.CalledProcessError: Command '['/usr/bin/gcc', '/tmp/tmp1rhyhps1/main.c', '-O3', '-shared', '-fPIC', '-Wno-psabi', '-o', '/tmp/tmp1rhyhps1/cuda_utils.cpython-311-x86_64-linux-gnu.so', '-lcuda', '-L/home/shimomura/Devenv/env/lib/python3.11/site-packages/triton/backends/nvidia/lib', '-L/lib/x86_64-linux-gnu', '-L/lib/i386-linux-gnu', '-I/home/shimomura/Devenv/env/lib/python3.11/site-packages/triton/backends/nvidia/include', '-I/tmp/tmp1rhyhps1', '-I/usr/include/python3.11']' returned non-zero exit status 1.

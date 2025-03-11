@@ -1,0 +1,18 @@
+[34m[1mwandb[0m: [33mWARNING[0m Calling wandb.run.save without any arguments is deprecated.Changes to attributes are automatically persisted.
+Found 82 files for patterns: ['/mnt/shimo/Pretrain_corpus/en_wiki/train_*.jsonl.gz', '/mnt/shimo/Pretrain_corpus/ja_wiki/train_*.jsonl.gz', '/mnt/shimo/Pretrain_corpus/level0/CC-MAIN-2013-2016.jsonl.gz']
+Traceback (most recent call last):
+  File "/mnt/shimo/KiTitans/Pretrain/train_mac_single_A100.py", line 59, in <module>
+    train_dataset = CombinedJsonlGzDataset(train_file_patterns, seq_len=SEQ_LEN, tokenizer=tokenizer)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/shimo/KiTitans/Pretrain/train_mac_single_A100.py", line 30, in __init__
+    for line in f:
+  File "/usr/lib/python3.11/gzip.py", line 314, in read1
+    return self._buffer.read1(size)
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/_compression.py", line 68, in readinto
+    data = self.read(len(byte_view))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.11/gzip.py", line 507, in read
+    uncompress = self._decompressor.decompress(buf, size)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+KeyboardInterrupt
