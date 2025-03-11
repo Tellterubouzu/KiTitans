@@ -1,0 +1,87 @@
+[34m[1mwandb[0m: [33mWARNING[0m Calling wandb.run.save without any arguments is deprecated.Changes to attributes are automatically persisted.
+Found 82 files for patterns: ['/mnt/shimo/Pretrain_corpus/en_wiki/train_*.jsonl.gz', '/mnt/shimo/Pretrain_corpus/ja_wiki/train_*.jsonl.gz', '/mnt/shimo/Pretrain_corpus/level0/CC-MAIN-2013-2016.jsonl.gz']
+Found 1 files for patterns: ['/mnt/shimo/Pretrain_corpus/en_wiki/validation_0.jsonl.gz']
+Found 1 files for patterns: ['/mnt/shimo/Pretrain_corpus/ja_wiki/validation_0.jsonl.gz']
+/mnt/shimo/KiTitans/Pretrain/train_mac_single_A100.py:216: FutureWarning: `torch.cuda.amp.GradScaler(args...)` is deprecated. Please use `torch.amp.GradScaler('cuda', args...)` instead.
+  scaler = torch.cuda.amp.GradScaler()
+/mnt/shimo/KiTitans/Pretrain/train_mac_single_A100.py:228: FutureWarning: `torch.cuda.amp.autocast(args...)` is deprecated. Please use `torch.amp.autocast('cuda', args...)` instead.
+  with torch.cuda.amp.autocast():
+Using /home/shimomura/.cache/torch_extensions/py311_cu126 as PyTorch extensions root...
+Detected CUDA files, patching ldflags
+Emitting ninja build file /home/shimomura/.cache/torch_extensions/py311_cu126/warpscan/build.ninja...
+Building extension module warpscan...
+Allowing ninja to set a default number of workers... (overridable by setting the environment variable MAX_JOBS=N)
+Loading extension module warpscan...
+triton.compiler.errors.CompileTimeAssertionFailure: at 3:4:
+def pack64(a, b):
+    tl.static_assert(a.dtype == tl.float32)
+    tl.static_assert(b.dtype == tl.float32)
+    ^
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/mnt/shimo/KiTitans/Pretrain/train_mac_single_A100.py", line 229, in <module>
+    loss = model(batch, return_loss=True)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/shimomura/Devenv/env/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1739, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/shimomura/Devenv/env/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1750, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/shimo/KiTitans/Pretrain/titans_pytorch/mac_transformer.py", line 815, in forward
+    retrieved, next_neural_mem_cache = mem.forward(
+                                       ^^^^^^^^^^^^
+  File "/mnt/shimo/KiTitans/Pretrain/titans_pytorch/neural_memory.py", line 965, in forward
+    next_updates, next_neural_mem_state, chunk_surprises = self.store_memories(
+                                                           ^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/shimo/KiTitans/Pretrain/titans_pytorch/neural_memory.py", line 734, in store_memories
+    momentum = self.assoc_scan(one_adaptive_momentum, momentum, prev = one_last_momentum) # momentum is S / surprise in the paper
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/shimomura/Devenv/env/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1739, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/shimomura/Devenv/env/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1750, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/shimo/KiTitans/Pretrain/titans_pytorch/associative_scan.py", line 173, in forward
+    out = accelerate_scan_fn(gates, inputs)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/shimo/KiTitans/Pretrain/titans_pytorch/associative_scan.py", line 166, in accelerate_scan_fn
+    outputs = scan(gates.contiguous(), inputs.contiguous())
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/shimomura/Devenv/env/lib/python3.11/site-packages/accelerated_scan/triton.py", line 129, in scan
+    return Scan.apply(gates, tokens)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/shimomura/Devenv/env/lib/python3.11/site-packages/torch/autograd/function.py", line 575, in apply
+    return super().apply(*args, **kwargs)  # type: ignore[misc]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/shimomura/Devenv/env/lib/python3.11/site-packages/accelerated_scan/triton.py", line 87, in forward
+    forward_scan[(B,C)](gates, tokens, states, SEQUENCE_LENGTH=T, enable_fp_fusion=False)
+  File "/home/shimomura/Devenv/env/lib/python3.11/site-packages/triton/runtime/jit.py", line 330, in <lambda>
+    return lambda *args, **kwargs: self.run(grid=grid, warmup=False, *args, **kwargs)
+                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/shimomura/Devenv/env/lib/python3.11/site-packages/triton/runtime/jit.py", line 623, in run
+    kernel = self.compile(
+             ^^^^^^^^^^^^^
+  File "/home/shimomura/Devenv/env/lib/python3.11/site-packages/triton/compiler/compiler.py", line 273, in compile
+    module = src.make_ir(options, codegen_fns, module_map, context)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/shimomura/Devenv/env/lib/python3.11/site-packages/triton/compiler/compiler.py", line 100, in make_ir
+    return ast_to_ttir(self.fn, self, context=context, options=options, codegen_fns=codegen_fns,
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+triton.compiler.errors.CompilationError: at 13:13:
+    gates,
+    tokens,
+    outputs,
+    SEQUENCE_LENGTH: tl.constexpr,
+):
+    sequence_id = tl.num_programs(axis=1) * tl.program_id(axis=0) + tl.program_id(axis=1)
+    strides = tl.arange(0, SEQUENCE_LENGTH) + sequence_id * SEQUENCE_LENGTH
+
+    tokens_ = tl.load(tokens + strides)
+    gates_ = tl.load(gates + strides)
+
+    tuples = pack64(tokens_, gates_)
+             ^

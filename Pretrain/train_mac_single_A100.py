@@ -1,3 +1,30 @@
+import gzip
+import glob
+import json
+
+# 確認したいjson.gzファイルのパターン（例: 英語ウィキのtrainファイル）
+file_pattern = "/mnt/shimo/Pretrain_corpus/en_wiki/train_*.jsonl.gz"
+file_list = glob.glob(file_pattern)
+
+if file_list:
+    # 最初のファイルの内容を確認
+    file_path = file_list[0]
+    print(f"ファイル {file_path} の内容（最初の10行）:")
+    with gzip.open(file_path, 'rt', encoding="utf-8") as f:
+        for i, line in enumerate(f):
+            try:
+                # jsonとして読み込み、辞書型に変換して表示
+                data = json.loads(line)
+                print(f"行 {i+1}: {data}")
+            except Exception as e:
+                print(f"行 {i+1}: 読み込みエラー: {e}")
+            if i >= 1:
+                break
+else:
+    print("指定したパターンのファイルが見つかりませんでした。")
+
+
+
 import os
 import glob
 import gzip
@@ -7,14 +34,10 @@ import torch
 ###################
 import torch._dynamo
 torch._dynamo.config.suppress_errors = True
-
 ####################
-
 from torch.utils.data import IterableDataset, DataLoader
 from transformers import AutoTokenizer, set_seed
 import wandb
-
-
 # -----------------------------
 # WandB の初期化（オンラインログ有効）
 # -----------------------------
@@ -26,9 +49,7 @@ WANDB_ONLINE = True
 wandb.init(project=PROJECT_NAME, mode='online' if WANDB_ONLINE else 'offline')
 wandb.run.name = RUN_NAME
 wandb.run.save()
-
 set_seed(123)
-
 # -----------------------------
 # Streaming 用 IterableDataset
 # -----------------------------
@@ -66,7 +87,6 @@ class StreamingJsonlGzDataset(IterableDataset):
                             yield enc["input_ids"].squeeze(0)
                     except Exception as e:
                         continue
-
 # -----------------------------
 # ファイルパス設定
 # -----------------------------
@@ -78,12 +98,10 @@ train_file_patterns = [
 ]
 en_val_pattern = os.path.join(base_dir, "en_wiki", "validation_0.jsonl.gz")
 ja_val_pattern = os.path.join(base_dir, "ja_wiki", "validation_0.jsonl.gz")
-
 # -----------------------------
 # トークナイザーのロード
 # -----------------------------
 tokenizer = AutoTokenizer.from_pretrained("sbintuitions/sarashina2.2-0.5b-instruct-v0.1")
-
 # -----------------------------
 # Dataset, DataLoader の作成
 # -----------------------------
@@ -91,22 +109,16 @@ SEQ_LEN = 2048
 train_dataset = StreamingJsonlGzDataset(train_file_patterns, seq_len=SEQ_LEN, tokenizer=tokenizer)
 en_val_dataset = StreamingJsonlGzDataset([en_val_pattern], seq_len=SEQ_LEN, tokenizer=tokenizer)
 ja_val_dataset = StreamingJsonlGzDataset([ja_val_pattern], seq_len=SEQ_LEN, tokenizer=tokenizer)
-
-
 # collate関数を定義
 def pad_collate_fn(batch, pad_token_id=0):
     batch = torch.nn.utils.rnn.pad_sequence(batch, batch_first=True, padding_value=pad_token_id)
     return batch
 # トークナイザーからパディングトークンを取得
 pad_token_id = tokenizer.pad_token_id if tokenizer.pad_token_id is not None else tokenizer.eos_token_id
-
 # DataLoaderの定義（collate_fnを指定）
-train_loader = DataLoader(
-train_dataset,batch_size=4,num_workers=4,collate_fn=lambda batch: pad_collate_fn(batch, pad_token_id))
-en_val_loader = DataLoader(en_val_dataset,batch_size=4,num_workers=4,collate_fn=lambda batch: pad_collate_fn(batch, pad_token_id))
-ja_val_loader = DataLoader(ja_val_dataset,batch_size=4,num_workers=4,collate_fn=lambda batch: pad_collate_fn(batch, pad_token_id))
-
-
+train_loader = DataLoader(train_dataset,batch_size=1,num_workers=1,collate_fn=lambda batch: pad_collate_fn(batch, pad_token_id))
+en_val_loader = DataLoader(en_val_dataset,batch_size=1,num_workers=1,collate_fn=lambda batch: pad_collate_fn(batch, pad_token_id))
+ja_val_loader = DataLoader(ja_val_dataset,batch_size=1,num_workers=1,collate_fn=lambda batch: pad_collate_fn(batch, pad_token_id))
 # -----------------------------
 # モデル初期化（MAC の設定）
 # -----------------------------
@@ -175,54 +187,118 @@ def save_checkpoint(step, epoch):
 # -----------------------------
 # 学習ループ（単一GPU）
 # -----------------------------
+
+
 num_epochs = 1  # epoch0 とする
-grad_accum_steps = 8  # バッチサイズ4×8 = 実質32
+grad_accum_steps = 1  # バッチサイズ4×8 = 実質32
+model.train()
+step_count = 0
+# for epoch in range(num_epochs):
+#     for batch in train_loader:
+#         # 各サンプルは [seq_len] テンソルなので、pad_sequence で [batch, seq_len] に変換
+#         batch = torch.nn.utils.rnn.pad_sequence(batch, batch_first=True, padding_value=0).cuda()
+#         loss = model(batch, return_loss=True)
+#         loss.backward()
+#         step_count += 1
+#         if step_count % grad_accum_steps == 0:
+#             torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)
+#             optimizer.step()
+#             optimizer.zero_grad()
+#         if step_count % 100 == 0:
+#             print(f"Epoch {epoch} Step {step_count}: Loss = {loss.item()}")
+#             wandb.log({"train_loss": loss.item(), "step": step_count, "epoch": epoch})
+#         # 3000ステップごとにチェックポイント保存
+#         if step_count % 3000 == 0:
+#             save_checkpoint(step_count, epoch)
+#     # -----------------------------
+#     # 検証ループ（英語）
+#     # -----------------------------
+#     model.eval()
+#     en_val_losses = []
+#     with torch.no_grad():
+#         for batch in en_val_loader:
+#             batch = torch.nn.utils.rnn.pad_sequence(batch, batch_first=True, padding_value=0).cuda()
+#             loss = model(batch, return_loss=True)
+#             en_val_losses.append(loss.item())
+#     avg_en_val = sum(en_val_losses) / len(en_val_losses) if en_val_losses else 0.0
+#     print(f"Epoch {epoch} English Validation Loss: {avg_en_val}")
+#     wandb.log({"en_val_loss": avg_en_val, "epoch": epoch})
+#     # -----------------------------
+#     # 検証ループ（日本語）
+#     # -----------------------------
+#     ja_val_losses = []
+#     with torch.no_grad():
+#         for batch in ja_val_loader:
+#             batch = torch.nn.utils.rnn.pad_sequence(batch, batch_first=True, padding_value=0).cuda()
+#             loss = model(batch, return_loss=True)
+#             ja_val_losses.append(loss.item())
+#     avg_ja_val = sum(ja_val_losses) / len(ja_val_losses) if ja_val_losses else 0.0
+#     print(f"Epoch {epoch} Japanese Validation Loss: {avg_ja_val}")
+#     wandb.log({"ja_val_loss": avg_ja_val, "epoch": epoch})
+#     # -----------------------------
+#     # エポック終了時のチェックポイント保存（必要なら）
+#     # -----------------------------
+#     save_checkpoint(step_count, epoch)
+#     model.train()
+
+# AMP用のGradScalerを初期化
+scaler = torch.cuda.amp.GradScaler()
+
 model.train()
 step_count = 0
 for epoch in range(num_epochs):
     for batch in train_loader:
-        # 各サンプルは [seq_len] テンソルなので、pad_sequence で [batch, seq_len] に変換
+        # バッチのパディングとGPUへの転送
         batch = torch.nn.utils.rnn.pad_sequence(batch, batch_first=True, padding_value=0).cuda()
-        loss = model(batch, return_loss=True)
-        loss.backward()
+
+        optimizer.zero_grad()
+
+        # autocast コンテキストで順伝播を実行（fp16で計算）
+        with torch.cuda.amp.autocast():
+            loss = model(batch, return_loss=True)
+
+        # スケーラーを用いて逆伝播
+        scaler.scale(loss).backward()
+
         step_count += 1
         if step_count % grad_accum_steps == 0:
             torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)
-            optimizer.step()
+            # スケール済みの勾配でパラメータ更新
+            scaler.step(optimizer)
+            scaler.update()
             optimizer.zero_grad()
+
         if step_count % 100 == 0:
             print(f"Epoch {epoch} Step {step_count}: Loss = {loss.item()}")
             wandb.log({"train_loss": loss.item(), "step": step_count, "epoch": epoch})
-        # 3000ステップごとにチェックポイント保存
+
         if step_count % 3000 == 0:
             save_checkpoint(step_count, epoch)
-    # -----------------------------
-    # 検証ループ（英語）
-    # -----------------------------
+
+    # 検証ループも同様に autocast を利用して評価
     model.eval()
     en_val_losses = []
     with torch.no_grad():
         for batch in en_val_loader:
             batch = torch.nn.utils.rnn.pad_sequence(batch, batch_first=True, padding_value=0).cuda()
-            loss = model(batch, return_loss=True)
+            with torch.cuda.amp.autocast():
+                loss = model(batch, return_loss=True)
             en_val_losses.append(loss.item())
     avg_en_val = sum(en_val_losses) / len(en_val_losses) if en_val_losses else 0.0
     print(f"Epoch {epoch} English Validation Loss: {avg_en_val}")
     wandb.log({"en_val_loss": avg_en_val, "epoch": epoch})
-    # -----------------------------
-    # 検証ループ（日本語）
-    # -----------------------------
+
+    # 日本語検証ループ
     ja_val_losses = []
     with torch.no_grad():
         for batch in ja_val_loader:
             batch = torch.nn.utils.rnn.pad_sequence(batch, batch_first=True, padding_value=0).cuda()
-            loss = model(batch, return_loss=True)
+            with torch.cuda.amp.autocast():
+                loss = model(batch, return_loss=True)
             ja_val_losses.append(loss.item())
     avg_ja_val = sum(ja_val_losses) / len(ja_val_losses) if ja_val_losses else 0.0
     print(f"Epoch {epoch} Japanese Validation Loss: {avg_ja_val}")
     wandb.log({"ja_val_loss": avg_ja_val, "epoch": epoch})
-    # -----------------------------
-    # エポック終了時のチェックポイント保存（必要なら）
-    # -----------------------------
+
     save_checkpoint(step_count, epoch)
     model.train()

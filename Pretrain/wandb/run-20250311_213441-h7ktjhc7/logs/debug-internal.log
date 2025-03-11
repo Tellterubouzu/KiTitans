@@ -1,0 +1,15 @@
+{"time":"2025-03-11T21:34:41.560510862+09:00","level":"INFO","msg":"stream: starting","core version":"0.19.8","symlink path":"/mnt/shimo/KiTitans/Pretrain/wandb/run-20250311_213441-h7ktjhc7/logs/debug-core.log"}
+{"time":"2025-03-11T21:34:41.681392296+09:00","level":"INFO","msg":"created new stream","id":"h7ktjhc7"}
+{"time":"2025-03-11T21:34:41.681487496+09:00","level":"INFO","msg":"stream: started","id":"h7ktjhc7"}
+{"time":"2025-03-11T21:34:41.681602297+09:00","level":"INFO","msg":"writer: Do: started","stream_id":"h7ktjhc7"}
+{"time":"2025-03-11T21:34:41.681702462+09:00","level":"INFO","msg":"handler: started","stream_id":"h7ktjhc7"}
+{"time":"2025-03-11T21:34:41.681834111+09:00","level":"INFO","msg":"sender: started","stream_id":"h7ktjhc7"}
+{"time":"2025-03-11T21:34:42.054387033+09:00","level":"INFO","msg":"Starting system monitor"}
+{"time":"2025-03-11T21:34:50.599277857+09:00","level":"INFO","msg":"stream: closing","id":"h7ktjhc7"}
+{"time":"2025-03-11T21:34:50.599525455+09:00","level":"INFO","msg":"Stopping system monitor"}
+{"time":"2025-03-11T21:34:50.601027698+09:00","level":"INFO","msg":"Stopped system monitor"}
+{"time":"2025-03-11T21:34:51.314547274+09:00","level":"INFO","msg":"fileTransfer: Close: file transfer manager closed"}
+{"time":"2025-03-11T21:34:51.58382797+09:00","level":"INFO","msg":"handler: closed","stream_id":"h7ktjhc7"}
+{"time":"2025-03-11T21:34:51.583896441+09:00","level":"INFO","msg":"sender: closed","stream_id":"h7ktjhc7"}
+{"time":"2025-03-11T21:34:51.583881678+09:00","level":"INFO","msg":"writer: Close: closed","stream_id":"h7ktjhc7"}
+{"time":"2025-03-11T21:34:51.586955064+09:00","level":"INFO","msg":"stream: closed","id":"h7ktjhc7"}

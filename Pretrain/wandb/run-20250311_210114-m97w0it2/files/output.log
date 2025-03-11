@@ -1,0 +1,51 @@
+[34m[1mwandb[0m: [33mWARNING[0m Calling wandb.run.save without any arguments is deprecated.Changes to attributes are automatically persisted.
+Found 82 files for patterns: ['/mnt/shimo/Pretrain_corpus/en_wiki/train_*.jsonl.gz', '/mnt/shimo/Pretrain_corpus/ja_wiki/train_*.jsonl.gz', '/mnt/shimo/Pretrain_corpus/level0/CC-MAIN-2013-2016.jsonl.gz']
+Found 1 files for patterns: ['/mnt/shimo/Pretrain_corpus/en_wiki/validation_0.jsonl.gz']
+Found 1 files for patterns: ['/mnt/shimo/Pretrain_corpus/ja_wiki/validation_0.jsonl.gz']
+Using /home/shimomura/.cache/torch_extensions/py311_cu126 as PyTorch extensions root...
+Detected CUDA files, patching ldflags
+Emitting ninja build file /home/shimomura/.cache/torch_extensions/py311_cu126/warpscan/build.ninja...
+Building extension module warpscan...
+Allowing ninja to set a default number of workers... (overridable by setting the environment variable MAX_JOBS=N)
+Loading extension module warpscan...
+Traceback (most recent call last):
+  File "/mnt/shimo/KiTitans/Pretrain/train_mac_single_A100.py", line 186, in <module>
+    loss = model(batch, return_loss=True)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/shimomura/Devenv/env/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1739, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/shimomura/Devenv/env/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1750, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/shimo/KiTitans/Pretrain/titans_pytorch/mac_transformer.py", line 815, in forward
+    retrieved, next_neural_mem_cache = mem.forward(
+                                       ^^^^^^^^^^^^
+  File "/mnt/shimo/KiTitans/Pretrain/titans_pytorch/neural_memory.py", line 965, in forward
+    next_updates, next_neural_mem_state, chunk_surprises = self.store_memories(
+                                                           ^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/shimo/KiTitans/Pretrain/titans_pytorch/neural_memory.py", line 753, in store_memories
+    update = self.assoc_scan(1. - decay_factor, update, prev = last_update, remove_prev = False)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/shimomura/Devenv/env/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1739, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/shimomura/Devenv/env/lib/python3.11/site-packages/torch/nn/modules/module.py", line 1750, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/shimo/KiTitans/Pretrain/titans_pytorch/associative_scan.py", line 173, in forward
+    out = accelerate_scan_fn(gates, inputs)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/shimo/KiTitans/Pretrain/titans_pytorch/associative_scan.py", line 166, in accelerate_scan_fn
+    outputs = scan(gates.contiguous(), inputs.contiguous())
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/shimomura/Devenv/env/lib/python3.11/site-packages/accelerated_scan/triton.py", line 129, in scan
+    return Scan.apply(gates, tokens)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/shimomura/Devenv/env/lib/python3.11/site-packages/torch/autograd/function.py", line 575, in apply
+    return super().apply(*args, **kwargs)  # type: ignore[misc]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/shimomura/Devenv/env/lib/python3.11/site-packages/accelerated_scan/triton.py", line 86, in forward
+    states = torch.zeros_like(tokens)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 44.00 MiB. GPU 0 has a total capacity of 79.25 GiB of which 33.25 MiB is free. Including non-PyTorch memory, this process has 79.20 GiB memory in use. Of the allocated memory 78.49 GiB is allocated by PyTorch, and 221.61 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)

@@ -1,0 +1,7 @@
+{"time":"2025-03-11T22:18:16.196288157+09:00","level":"INFO","msg":"stream: starting","core version":"0.19.8","symlink path":"/mnt/shimo/KiTitans/Pretrain/wandb/run-20250311_221816-ufjiraxj/logs/debug-core.log"}
+{"time":"2025-03-11T22:18:16.319745636+09:00","level":"INFO","msg":"created new stream","id":"ufjiraxj"}
+{"time":"2025-03-11T22:18:16.319835307+09:00","level":"INFO","msg":"stream: started","id":"ufjiraxj"}
+{"time":"2025-03-11T22:18:16.319933886+09:00","level":"INFO","msg":"writer: Do: started","stream_id":"ufjiraxj"}
+{"time":"2025-03-11T22:18:16.320058025+09:00","level":"INFO","msg":"sender: started","stream_id":"ufjiraxj"}
+{"time":"2025-03-11T22:18:16.320127342+09:00","level":"INFO","msg":"handler: started","stream_id":"ufjiraxj"}
+{"time":"2025-03-11T22:18:16.672849376+09:00","level":"INFO","msg":"Starting system monitor"}
