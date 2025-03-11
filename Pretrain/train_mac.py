@@ -26,21 +26,21 @@ GENERATE_EVERY  = 500               # 生成（テキスト生成等）を行う
 PRIME_LENGTH = 100                  # テキスト生成時のプライム（初期入力）シーケンスの長さ
 GENERATE_LENGTH = 512               # テキスト生成時に生成するトークン数
 SHOULD_GENERATE = True              # テキスト生成を実施するかどうかのフラグ
-SEQ_LEN = 512                       # 入力シーケンスの長さ
+SEQ_LEN = 4096                       # 入力シーケンスの長さ
 
 # neural memory related
 NEURAL_MEMORY_DEPTH = 2             # Neural Memoryモジュール内のMLPの深さ（層数）
-NUM_PERSIST_MEM = 4                 # 永続メモリトークンの数（タスク固有の固定メモリ数）
-NUM_LONGTERM_MEM = 4                # 長期メモリトークンの数（長期記憶として保持するトークン数）
-NEURAL_MEM_LAYERS = (2, 4, 6)         # Neural Memoryを持つTransformer層の番号（例: 2層目、4層目、6層目に搭載）
+NUM_PERSIST_MEM = 8                 # 永続メモリトークンの数（タスク固有の固定メモリ数）
+NUM_LONGTERM_MEM = 8                # 長期メモリトークンの数（長期記憶として保持するトークン数）
+NEURAL_MEM_LAYERS = (3,6,9,12,15,18,21)         # Neural Memoryを持つTransformer層の番号（例: 2層目、4層目、6層目に搭載）
 NEURAL_MEM_GATE_ATTN_OUTPUT = False # アテンション出力に対してゲート処理を適用するかのフラグ
 NEURAL_MEM_MOMENTUM = True          # Neural Memory更新時にモメンタム（勾配の慣性項）を使用するかのフラグ
 NEURAL_MEM_MOMENTUM_ORDER = 1       # モメンタムの次数（1なら一次モメンタム）
 NEURAL_MEM_QK_NORM = True           # Neural Memoryでクエリ・キーに対してRMSNormなどの正規化を適用するかのフラグ
 NEURAL_MEM_MAX_LR = 1e-1            # Neural Memory更新時に使用する最大学習率（適応学習率変換用）
 USE_MEM_ATTENTION_MODEL = False     # Neural MemoryモジュールとしてMemoryAttentionを使用するか、MemoryMLPを使用するかの選択フラグ
-WINDOW_SIZE = 32                    # アテンションのスライディングウィンドウサイズ（セグメント長として利用）
-NEURAL_MEM_SEGMENT_LEN = 4          # Neural Memoryのセグメント長（学習率やモメンタムの分解の粒度を決定）
+WINDOW_SIZE = 128                    # アテンションのスライディングウィンドウサイズ（セグメント長として利用）
+NEURAL_MEM_SEGMENT_LEN = 16          # Neural Memoryのセグメント長（学習率やモメンタムの分解の粒度を決定）
 NEURAL_MEM_BATCH_SIZE = 128         # Neural Memory更新に使用するバッチサイズ（小さい値だと頻繁に更新可能）
 SLIDING_WINDOWS = True              # スライディングウィンドウアテンションを使用するかのフラグ
 STORE_ATTN_POOL_CHUNKS = True       # チャンクごとのアテンションプーリングを使用するか（モメンタムやレイヤー毎の学習率調整などに影響）
@@ -79,29 +79,27 @@ def decode_tokens(tokens):
     return ''.join(list(map(decode_token, tokens)))
 
 # memory model
-
 if USE_MEM_ATTENTION_MODEL:
     neural_memory_model = MemoryAttention(
-        dim = 64
+        dim = 80  # headの次元サイズ（元は64→80に変更）
     )
 else:
     neural_memory_model = MemoryMLP(
-        dim = 64,
+        dim = 80,  # headの次元サイズ
         depth = NEURAL_MEMORY_DEPTH
     )
 
 # instantiate memory-as-context transformer
-
 model = MemoryAsContextTransformer(
-    num_tokens = 256,
-    dim = 384,
-    depth = 8,
-    segment_len = WINDOW_SIZE,
-    num_persist_mem_tokens = NUM_PERSIST_MEM,
-    num_longterm_mem_tokens = NUM_LONGTERM_MEM,
-    neural_memory_layers = NEURAL_MEM_LAYERS,
-    neural_memory_segment_len = NEURAL_MEM_SEGMENT_LEN,
-    neural_memory_batch_size = NEURAL_MEM_BATCH_SIZE,
+    num_tokens = 102400,            # 語彙数（sarashinaに合わせる）
+    dim = 1120,                    # 隠れ層のサイズ
+    depth = 22,                    # Transformer層数（22層）
+    segment_len = WINDOW_SIZE,     # アテンションのセグメント長としてウィンドウサイズを使用（128）
+    num_persist_mem_tokens = NUM_PERSIST_MEM,  # 永続メモリトークン数（8）
+    num_longterm_mem_tokens = NUM_LONGTERM_MEM,  # 長期メモリトークン数（8）
+    neural_memory_layers = NEURAL_MEM_LAYERS,      # Neural Memory搭載層： (3,6,9,12,15,18,21)
+    neural_memory_segment_len = NEURAL_MEM_SEGMENT_LEN,  # Neural Memoryのセグメント長（16）
+    neural_memory_batch_size = NEURAL_MEM_BATCH_SIZE,    # Neural Memory更新時のバッチサイズ（128）
     neural_mem_gate_attn_output = NEURAL_MEM_GATE_ATTN_OUTPUT,
     neural_mem_weight_residual = NEURAL_MEM_WEIGHT_RESIDUAL,
     neural_memory_qkv_receives_diff_views = NEURAL_MEM_QKV_RECEIVES_DIFF_VIEW,
@@ -109,8 +107,8 @@ model = MemoryAsContextTransformer(
     sliding_window_attn = SLIDING_WINDOWS,
     neural_memory_model = neural_memory_model,
     neural_memory_kwargs = dict(
-        dim_head = 64,
-        heads = 4,
+        dim_head = 80,             # 各Attentionヘッドのディメンションサイズ（80）
+        heads = 14,                # Attentionヘッドの数（1120 / 80 = 14）
         attn_pool_chunks = STORE_ATTN_POOL_CHUNKS,
         qk_rmsnorm = NEURAL_MEM_QK_NORM,
         momentum = NEURAL_MEM_MOMENTUM,
@@ -120,6 +118,7 @@ model = MemoryAsContextTransformer(
         per_parameter_lr_modulation = MEMORY_MODEL_PER_LAYER_LEARNED_LR
     )
 ).cuda()
+
 
 # prepare enwik8 data
 

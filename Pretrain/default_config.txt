@@ -1,0 +1,41 @@
+# constants
+NUM_BATCHES = int(1e5)              # 総トレーニングバッチ数（例: 100,000 バッチ）
+BATCH_SIZE = 4                      # 1バッチあたりのサンプル数
+GRADIENT_ACCUMULATE_EVERY = 4       # 勾配を更新する前に累積するバッチ数（複数バッチ分の勾配を合計して更新）
+LEARNING_RATE = 2e-4                # 学習率
+VALIDATE_EVERY  = 100               # 検証を行う間隔（バッチ数単位）
+GENERATE_EVERY  = 500               # 生成（テキスト生成等）を行う間隔（バッチ数単位）
+PRIME_LENGTH = 100                  # テキスト生成時のプライム（初期入力）シーケンスの長さ
+GENERATE_LENGTH = 512               # テキスト生成時に生成するトークン数
+SHOULD_GENERATE = True              # テキスト生成を実施するかどうかのフラグ
+SEQ_LEN = 512                       # 入力シーケンスの長さ
+
+# neural memory related
+NEURAL_MEMORY_DEPTH = 2             # Neural Memoryモジュール内のMLPの深さ（層数）
+NUM_PERSIST_MEM = 4                 # 永続メモリトークンの数（タスク固有の固定メモリ数）
+NUM_LONGTERM_MEM = 4                # 長期メモリトークンの数（長期記憶として保持するトークン数）
+NEURAL_MEM_LAYERS = (2, 4, 6)         # Neural Memoryを持つTransformer層の番号（例: 2層目、4層目、6層目に搭載）
+NEURAL_MEM_GATE_ATTN_OUTPUT = False # アテンション出力に対してゲート処理を適用するかのフラグ
+NEURAL_MEM_MOMENTUM = True          # Neural Memory更新時にモメンタム（勾配の慣性項）を使用するかのフラグ
+NEURAL_MEM_MOMENTUM_ORDER = 1       # モメンタムの次数（1なら一次モメンタム）
+NEURAL_MEM_QK_NORM = True           # Neural Memoryでクエリ・キーに対してRMSNormなどの正規化を適用するかのフラグ
+NEURAL_MEM_MAX_LR = 1e-1            # Neural Memory更新時に使用する最大学習率（適応学習率変換用）
+USE_MEM_ATTENTION_MODEL = False     # Neural MemoryモジュールとしてMemoryAttentionを使用するか、MemoryMLPを使用するかの選択フラグ
+WINDOW_SIZE = 32                    # アテンションのスライディングウィンドウサイズ（セグメント長として利用）
+NEURAL_MEM_SEGMENT_LEN = 4          # Neural Memoryのセグメント長（学習率やモメンタムの分解の粒度を決定）
+NEURAL_MEM_BATCH_SIZE = 128         # Neural Memory更新に使用するバッチサイズ（小さい値だと頻繁に更新可能）
+SLIDING_WINDOWS = True              # スライディングウィンドウアテンションを使用するかのフラグ
+STORE_ATTN_POOL_CHUNKS = True       # チャンクごとのアテンションプーリングを使用するか（モメンタムやレイヤー毎の学習率調整などに影響）
+MEMORY_MODEL_PER_LAYER_LEARNED_LR = True  # Neural Memory各層で個別に学習率を調整するかのフラグ
+NEURAL_MEM_WEIGHT_RESIDUAL = True   # 前層のNeural Memory重みを残差接続として取り入れるか（性能向上のための追加工夫）
+NEURAL_MEM_QKV_RECEIVES_DIFF_VIEW = True  # Neural Memoryのクエリ・キー・バリューが異なる層の出力から取得されるようにする（NAS的アプローチ）
+
+# experiment related
+PROJECT_NAME = 'titans-mac-transformer'  # プロジェクト名（実験管理やWandBログ用）
+RUN_NAME = f'mac - {NUM_LONGTERM_MEM} longterm mems, layers {NEURAL_MEM_LAYERS}'  # 実験ランの名前（使用する長期メモリトークン数や搭載層を表示）
+WANDB_ONLINE = False              # WandBでオンラインログを行うかどうかのフラグ（Falseならローカルのみ）
+
+# perf related
+USE_ACCELERATED_SCAN = True       # 高速なAssociative Scanアルゴリズム（accelerated scan）の使用フラグ
+USE_FLEX_ATTN = True              # Flex Attention（柔軟なアテンション実装）の使用フラグ（最新のPyTorch＋CUDAが必要）
+USE_FAST_INFERENCE = False         # 推論時にキャッシュ等を利用して高速化するかのフラグ

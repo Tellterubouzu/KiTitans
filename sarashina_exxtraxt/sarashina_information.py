@@ -1,7 +1,8 @@
 from transformers import AutoTokenizer, AutoConfig
 
 def main():
-    model_name = "sbintuitions/sarashina2.2-0.5b-instruct-v0.1"
+    #model_name = "sbintuitions/sarashina2.2-0.5b-instruct-v0.1"
+    model_name = "Qwen/Qwen2-0.5B"
     
     # トークナイザーのロード（日本語モデルとしてそのまま利用）
     tokenizer = AutoTokenizer.from_pretrained(model_name)
