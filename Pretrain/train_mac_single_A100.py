@@ -23,8 +23,6 @@ if file_list:
 else:
     print("指定したパターンのファイルが見つかりませんでした。")
 
-
-
 import os
 import glob
 import gzip
@@ -302,3 +300,5 @@ for epoch in range(num_epochs):
 
     save_checkpoint(step_count, epoch)
     model.train()
+
+

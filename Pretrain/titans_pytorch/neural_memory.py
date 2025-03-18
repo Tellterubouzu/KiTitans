@@ -867,7 +867,8 @@ class NeuralMemory(Module):
         detach_mem_state = False,
         prev_weights = None,
         store_mask: Tensor | None = None,
-        return_surprises = False
+        return_surprises = False,
+        ttt_batch_size: int | None = None
     ):
         is_multi_input = self.qkv_receives_diff_views
 
@@ -904,7 +905,7 @@ class NeuralMemory(Module):
         # compute split sizes of sequence
         # for now manually update weights to last update at the correct boundaries
 
-        store_seq_len, chunk_size, batch_size = store_seq.shape[-2], self.chunk_size, self.batch_size
+        store_seq_len, chunk_size, batch_size = store_seq.shape[-2], self.chunk_size, default(ttt_batch_size, self.batch_size)
 
         need_update_weights = exists(batch_size)
 
@@ -961,17 +962,16 @@ class NeuralMemory(Module):
             is_last = ind == (len(store_seqs) - 1)
 
             # store
-            
-            with torch.cuda.amp.autocast(enabled=False):
-                next_updates, next_neural_mem_state, chunk_surprises = self.store_memories(
-                    store_seq_chunk,
-                    weights,
-                    seq_index = seq_index,
-                    past_state = past_state,
-                    prev_weights = prev_weights,
-                    mask = maybe_store_mask,
-                    return_surprises = True
-                )
+
+            next_updates, next_neural_mem_state, chunk_surprises = self.store_memories(
+                store_seq_chunk,
+                weights,
+                seq_index = seq_index,
+                past_state = past_state,
+                prev_weights = prev_weights,
+                mask = maybe_store_mask,
+                return_surprises = True
+            )
 
             weights = next_neural_mem_state.weights
             seq_index = next_neural_mem_state.seq_index

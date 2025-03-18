@@ -17,46 +17,50 @@ from titans_pytorch import (
 )
 
 # constants
-NUM_BATCHES = int(1e5)              # 総トレーニングバッチ数（例: 100,000 バッチ）
-BATCH_SIZE = 4                      # 1バッチあたりのサンプル数
-GRADIENT_ACCUMULATE_EVERY = 4       # 勾配を更新する前に累積するバッチ数（複数バッチ分の勾配を合計して更新）
-LEARNING_RATE = 2e-4                # 学習率
-VALIDATE_EVERY  = 100               # 検証を行う間隔（バッチ数単位）
-GENERATE_EVERY  = 500               # 生成（テキスト生成等）を行う間隔（バッチ数単位）
-PRIME_LENGTH = 100                  # テキスト生成時のプライム（初期入力）シーケンスの長さ
-GENERATE_LENGTH = 512               # テキスト生成時に生成するトークン数
-SHOULD_GENERATE = True              # テキスト生成を実施するかどうかのフラグ
-SEQ_LEN = 4096                       # 入力シーケンスの長さ
+
+NUM_BATCHES = int(1e5)
+BATCH_SIZE = 16
+GRADIENT_ACCUMULATE_EVERY = 4
+LEARNING_RATE = 2e-4
+VALIDATE_EVERY  = 100
+GENERATE_EVERY  = 500
+PRIME_LENGTH = 100
+GENERATE_LENGTH = 512
+SHOULD_GENERATE = True
+SEQ_LEN = 512
 
 # neural memory related
-NEURAL_MEMORY_DEPTH = 2             # Neural Memoryモジュール内のMLPの深さ（層数）
-NUM_PERSIST_MEM = 8                 # 永続メモリトークンの数（タスク固有の固定メモリ数）
-NUM_LONGTERM_MEM = 8                # 長期メモリトークンの数（長期記憶として保持するトークン数）
-NEURAL_MEM_LAYERS = (3,6,9,12,15,18,21)         # Neural Memoryを持つTransformer層の番号（例: 2層目、4層目、6層目に搭載）
-NEURAL_MEM_GATE_ATTN_OUTPUT = False # アテンション出力に対してゲート処理を適用するかのフラグ
-NEURAL_MEM_MOMENTUM = True          # Neural Memory更新時にモメンタム（勾配の慣性項）を使用するかのフラグ
-NEURAL_MEM_MOMENTUM_ORDER = 1       # モメンタムの次数（1なら一次モメンタム）
-NEURAL_MEM_QK_NORM = True           # Neural Memoryでクエリ・キーに対してRMSNormなどの正規化を適用するかのフラグ
-NEURAL_MEM_MAX_LR = 1e-1            # Neural Memory更新時に使用する最大学習率（適応学習率変換用）
-USE_MEM_ATTENTION_MODEL = False     # Neural MemoryモジュールとしてMemoryAttentionを使用するか、MemoryMLPを使用するかの選択フラグ
-WINDOW_SIZE = 128                    # アテンションのスライディングウィンドウサイズ（セグメント長として利用）
-NEURAL_MEM_SEGMENT_LEN = 16          # Neural Memoryのセグメント長（学習率やモメンタムの分解の粒度を決定）
-NEURAL_MEM_BATCH_SIZE = 128         # Neural Memory更新に使用するバッチサイズ（小さい値だと頻繁に更新可能）
-SLIDING_WINDOWS = True              # スライディングウィンドウアテンションを使用するかのフラグ
-STORE_ATTN_POOL_CHUNKS = True       # チャンクごとのアテンションプーリングを使用するか（モメンタムやレイヤー毎の学習率調整などに影響）
-MEMORY_MODEL_PER_LAYER_LEARNED_LR = True  # Neural Memory各層で個別に学習率を調整するかのフラグ
-NEURAL_MEM_WEIGHT_RESIDUAL = True   # 前層のNeural Memory重みを残差接続として取り入れるか（性能向上のための追加工夫）
-NEURAL_MEM_QKV_RECEIVES_DIFF_VIEW = True  # Neural Memoryのクエリ・キー・バリューが異なる層の出力から取得されるようにする（NAS的アプローチ）
+
+NEURAL_MEMORY_DEPTH = 2
+NUM_PERSIST_MEM = 4
+NUM_LONGTERM_MEM = 4
+NEURAL_MEM_LAYERS = (2, 4, 6)                   # layers 2, 4, 6 have neural memory, can add more
+NEURAL_MEM_GATE_ATTN_OUTPUT = False
+NEURAL_MEM_MOMENTUM = True
+NEURAL_MEM_MOMENTUM_ORDER = 1
+NEURAL_MEM_QK_NORM = True
+NEURAL_MEM_MAX_LR = 1e-1
+USE_MEM_ATTENTION_MODEL = False
+WINDOW_SIZE = 32
+NEURAL_MEM_SEGMENT_LEN = 4                      # set smaller for more granularity for learning rate / momentum etc
+NEURAL_MEM_BATCH_SIZE = 128                     # set smaller to update the neural memory weights more often as it traverses the sequence
+SLIDING_WINDOWS = True
+STORE_ATTN_POOL_CHUNKS = True                   # whether to use attention pooling for chunk derived momentum, per-layer lr mod, decay
+MEMORY_MODEL_PER_LAYER_LEARNED_LR = True
+NEURAL_MEM_WEIGHT_RESIDUAL = True               # learning to accept contributions from the weights of the previous neural mem layer brings about significant improvements. this was improvised and not in the paper, but inspired by the value residual learning free lunch paper
+NEURAL_MEM_QKV_RECEIVES_DIFF_VIEW = True        # will allow the neural memory to select what layers from which to derive queries / keys / values, effectively allowing it to graft itself to the transformer in any way to be beneficial. this is to address an issue from a phd student who noted that the mem network is learning nothing more than wk @ wv. this also generalizes all possible ways to connect the neural memory to a transformer, a sort of NAS
 
 # experiment related
-PROJECT_NAME = 'titans-mac-transformer'  # プロジェクト名（実験管理やWandBログ用）
-RUN_NAME = f'mac - {NUM_LONGTERM_MEM} longterm mems, layers {NEURAL_MEM_LAYERS}'  # 実験ランの名前（使用する長期メモリトークン数や搭載層を表示）
-WANDB_ONLINE = False              # WandBでオンラインログを行うかどうかのフラグ（Falseならローカルのみ）
+
+PROJECT_NAME = 'titans-mac-transformer'
+RUN_NAME = f'mac - {NUM_LONGTERM_MEM} longterm mems, layers {NEURAL_MEM_LAYERS}'
+WANDB_ONLINE = False # turn this on to pipe experiment to cloud
 
 # perf related
-USE_ACCELERATED_SCAN = True       # 高速なAssociative Scanアルゴリズム（accelerated scan）の使用フラグ
-USE_FLEX_ATTN = True              # Flex Attention（柔軟なアテンション実装）の使用フラグ（最新のPyTorch＋CUDAが必要）
-USE_FAST_INFERENCE = False         # 推論時にキャッシュ等を利用して高速化するかのフラグ
+
+USE_ACCELERATED_SCAN = True
+USE_FLEX_ATTN = True
+USE_FAST_INFERENCE = False
 
 # wandb experiment tracker
 
@@ -79,27 +83,29 @@ def decode_tokens(tokens):
     return ''.join(list(map(decode_token, tokens)))
 
 # memory model
+
 if USE_MEM_ATTENTION_MODEL:
     neural_memory_model = MemoryAttention(
-        dim = 80  # headの次元サイズ（元は64→80に変更）
+        dim = 64
     )
 else:
     neural_memory_model = MemoryMLP(
-        dim = 80,  # headの次元サイズ
+        dim = 64,
         depth = NEURAL_MEMORY_DEPTH
     )
 
 # instantiate memory-as-context transformer
+
 model = MemoryAsContextTransformer(
-    num_tokens = 102400,            # 語彙数（sarashinaに合わせる）
-    dim = 1120,                    # 隠れ層のサイズ
-    depth = 22,                    # Transformer層数（22層）
-    segment_len = WINDOW_SIZE,     # アテンションのセグメント長としてウィンドウサイズを使用（128）
-    num_persist_mem_tokens = NUM_PERSIST_MEM,  # 永続メモリトークン数（8）
-    num_longterm_mem_tokens = NUM_LONGTERM_MEM,  # 長期メモリトークン数（8）
-    neural_memory_layers = NEURAL_MEM_LAYERS,      # Neural Memory搭載層： (3,6,9,12,15,18,21)
-    neural_memory_segment_len = NEURAL_MEM_SEGMENT_LEN,  # Neural Memoryのセグメント長（16）
-    neural_memory_batch_size = NEURAL_MEM_BATCH_SIZE,    # Neural Memory更新時のバッチサイズ（128）
+    num_tokens = 256,
+    dim = 384,
+    depth = 8,
+    segment_len = WINDOW_SIZE,
+    num_persist_mem_tokens = NUM_PERSIST_MEM,
+    num_longterm_mem_tokens = NUM_LONGTERM_MEM,
+    neural_memory_layers = NEURAL_MEM_LAYERS,
+    neural_memory_segment_len = NEURAL_MEM_SEGMENT_LEN,
+    neural_memory_batch_size = NEURAL_MEM_BATCH_SIZE,
     neural_mem_gate_attn_output = NEURAL_MEM_GATE_ATTN_OUTPUT,
     neural_mem_weight_residual = NEURAL_MEM_WEIGHT_RESIDUAL,
     neural_memory_qkv_receives_diff_views = NEURAL_MEM_QKV_RECEIVES_DIFF_VIEW,
@@ -107,8 +113,8 @@ model = MemoryAsContextTransformer(
     sliding_window_attn = SLIDING_WINDOWS,
     neural_memory_model = neural_memory_model,
     neural_memory_kwargs = dict(
-        dim_head = 80,             # 各Attentionヘッドのディメンションサイズ（80）
-        heads = 14,                # Attentionヘッドの数（1120 / 80 = 14）
+        dim_head = 64,
+        heads = 4,
         attn_pool_chunks = STORE_ATTN_POOL_CHUNKS,
         qk_rmsnorm = NEURAL_MEM_QK_NORM,
         momentum = NEURAL_MEM_MOMENTUM,
@@ -118,7 +124,6 @@ model = MemoryAsContextTransformer(
         per_parameter_lr_modulation = MEMORY_MODEL_PER_LAYER_LEARNED_LR
     )
 ).cuda()
-
 
 # prepare enwik8 data
 
