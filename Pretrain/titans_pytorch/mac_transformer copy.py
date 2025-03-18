@@ -330,24 +330,25 @@ class SegmentedAttention(Module):
         pmk, pmv = repeat(self.persistent_memory, 'kv h n d -> kv b h n d', b = batch)
 
         # relative positions
+
         q, k = self.rotary_emb.rotate_queries_with_cached_keys(q, k)
 
         # persistent memory
+
         k = cat((pmk, k), dim = -2)
         v = cat((pmv, v), dim = -2)
 
-        # ここでキーとバリューをクエリの dtype に合わせる
-        k = k.to(q.dtype)
-        v = v.to(q.dtype)
-
         # prep flex attention
+
         if not exists(flex_attn_fn):
             block_mask = create_mac_block_mask(seq_len, self.total_segment_len, self.num_persist_mem_tokens, self.sliding)
+
             flex_attn_fn = partial(flex_attention, block_mask = block_mask)
 
-        # attention
-        out = flex_attn_fn(q, k, v)
 
+        # attention
+
+        out = flex_attn_fn(q, k, v)
 
         out = self.merge_heads(out)
 

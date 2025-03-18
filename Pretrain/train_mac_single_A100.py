@@ -27,8 +27,8 @@ NUM_TOKENS = tokenizer.vocab_size
 # ② ハイパーパラメータ設定（総パラメータ数約500Mを目指す）
 # ─────────────────────────────
 NUM_BATCHES = int(1e5)
-BATCH_SIZE = 4
-GRADIENT_ACCUMULATE_EVERY = 4
+BATCH_SIZE = 2
+GRADIENT_ACCUMULATE_EVERY = 8
 LEARNING_RATE = 2e-4
 VALIDATE_EVERY  = 100
 GENERATE_EVERY  = 500
@@ -47,7 +47,7 @@ NEURAL_MEM_GATE_ATTN_OUTPUT = False
 NEURAL_MEM_MOMENTUM = True
 NEURAL_MEM_MOMENTUM_ORDER = 1
 NEURAL_MEM_QK_NORM = True
-NEURAL_MEM_MAX_LR = 1e-1
+NEURAL_MEM_MAX_LR = 1e-3
 USE_MEM_ATTENTION_MODEL = False
 WINDOW_SIZE = 128  # セグメント長を128に増加
 NEURAL_MEM_SEGMENT_LEN = 16
@@ -64,7 +64,7 @@ MODEL_DEPTH = 24
 
 PROJECT_NAME = 'titans-mac-transformer-0.5B'
 RUN_NAME = f'mac - {NUM_LONGTERM_MEM} longterm mems, layers {NEURAL_MEM_LAYERS}'
-WANDB_ONLINE = False
+WANDB_ONLINE = True
 
 import wandb
 wandb.init(project = PROJECT_NAME, mode = 'disabled' if not WANDB_ONLINE else 'online')
@@ -128,7 +128,7 @@ model = MemoryAsContextTransformer(
 # ─────────────────────────────
 # ⑥ データの準備（enwik8データセット）
 # ─────────────────────────────
-with gzip.open('./data/enwik8.gz') as file:
+with gzip.open('KiTitans/Pretrain/epoch_datasets/epoch0_dataset.jsonl.gz') as file:
     data = np.frombuffer(file.read(int(95e6)), dtype = np.uint8).copy()
     data_train, data_val = np.split(data, [int(90e6)])
     data_train, data_val = map(torch.from_numpy, (data_train, data_val))
@@ -165,10 +165,11 @@ scaler = torch.cuda.amp.GradScaler()
 for i in tqdm.tqdm(range(NUM_BATCHES), mininterval = 10., desc = 'training'):
     model.train()
     for __ in range(GRADIENT_ACCUMULATE_EVERY):
-        with torch.cuda.amp.autocast():
+        with torch.cuda.amp.autocast(dtype = torch.bfloat16):
             loss = model(next(train_loader), return_loss = True)
         scaler.scale(loss).backward()
-    print(f'training loss: {loss.item()}')
+    if i % VALIDATE_EVERY == 0:
+        print(f'training loss: {loss.item()}')
     torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)
     scaler.step(optim)
     scaler.update()
@@ -186,4 +187,5 @@ for i in tqdm.tqdm(range(NUM_BATCHES), mininterval = 10., desc = 'training'):
         print(f'{prime} \n\n {"*" * 100}')
         sample = model.sample(inp[None, ...], GENERATE_LENGTH, use_cache = False)
         output_str = decode_tokens(sample[0])
+        output_str = output_str.encode("utf-8", "replace").decode("utf-8")
         print(output_str)

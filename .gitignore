@@ -1,3 +1,5 @@
 .env
 **__pycache__**
 Pretrain/wandb
+**.gz
+epoch_datasets

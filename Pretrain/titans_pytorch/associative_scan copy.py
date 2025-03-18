@@ -153,43 +153,22 @@ class AssocScan(Module):
 
         scan = triton_scan if gates.is_cuda else warp_scan
 
-        # def accelerate_scan_fn(gates, inputs):
-        #     gates = gates.expand_as(inputs)
-        #     gates, inputs = tuple(rearrange(t, 'b n d -> b d n') for t in (gates, inputs))
-
-        #     seq_len = gates.shape[-1]
-        #     next_power_two_seq_len = 2 ** max(5, int(math.ceil(math.log2(seq_len))))
-
-        #     gates = F.pad(gates, (0, next_power_two_seq_len - seq_len))
-        #     inputs = F.pad(inputs, (0, next_power_two_seq_len - seq_len))
-
-        #     outputs = scan(gates.contiguous(), inputs.contiguous())
-
-        #     outputs = outputs[..., :seq_len]
-        #     outputs = rearrange(outputs, 'b d n -> b n d')
-
-        #     return outputs
         def accelerate_scan_fn(gates, inputs):
-            orig_dtype = inputs.dtype  # 元の dtype を保存（通常は bf16）
-            # gates と inputs を float32 にキャスト
-            gates = gates.to(torch.float32)
-            inputs = inputs.to(torch.float32)
-            
             gates = gates.expand_as(inputs)
             gates, inputs = tuple(rearrange(t, 'b n d -> b d n') for t in (gates, inputs))
 
             seq_len = gates.shape[-1]
             next_power_two_seq_len = 2 ** max(5, int(math.ceil(math.log2(seq_len))))
+
             gates = F.pad(gates, (0, next_power_two_seq_len - seq_len))
             inputs = F.pad(inputs, (0, next_power_two_seq_len - seq_len))
 
             outputs = scan(gates.contiguous(), inputs.contiguous())
+
             outputs = outputs[..., :seq_len]
             outputs = rearrange(outputs, 'b d n -> b n d')
 
-            # 出力を元の dtype に戻す
-            return outputs.to(orig_dtype)
-
+            return outputs
 
         out = accelerate_scan_fn(gates, inputs)
 
