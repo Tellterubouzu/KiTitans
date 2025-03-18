@@ -1,304 +1,189 @@
-import gzip
-import glob
-import json
-
-# 確認したいjson.gzファイルのパターン（例: 英語ウィキのtrainファイル）
-file_pattern = "/mnt/shimo/Pretrain_corpus/en_wiki/train_*.jsonl.gz"
-file_list = glob.glob(file_pattern)
-
-if file_list:
-    # 最初のファイルの内容を確認
-    file_path = file_list[0]
-    print(f"ファイル {file_path} の内容（最初の10行）:")
-    with gzip.open(file_path, 'rt', encoding="utf-8") as f:
-        for i, line in enumerate(f):
-            try:
-                # jsonとして読み込み、辞書型に変換して表示
-                data = json.loads(line)
-                print(f"行 {i+1}: {data}")
-            except Exception as e:
-                print(f"行 {i+1}: 読み込みエラー: {e}")
-            if i >= 1:
-                break
-else:
-    print("指定したパターンのファイルが見つかりませんでした。")
-
-import os
-import glob
-import gzip
-import json
 import random
+import tqdm
+import gzip
+import numpy as np
+
 import torch
-###################
-import torch._dynamo
-torch._dynamo.config.suppress_errors = True
-####################
-from torch.utils.data import IterableDataset, DataLoader
-from transformers import AutoTokenizer, set_seed
-import wandb
-# -----------------------------
-# WandB の初期化（オンラインログ有効）
-# -----------------------------
-PROJECT_NAME = 'titans-mac-transformer'
-NUM_LONGTERM_MEM = 8
-NEURAL_MEM_LAYERS = (3, 6, 9, 12, 15, 18, 21)
+from torch import nn, Tensor
+from torch.nn import functional as F
+from torch.utils.data import DataLoader, Dataset
+from transformers import AutoTokenizer  # トークナイザー用インポート
+
+from adam_atan2_pytorch import AdoptAtan2
+
+from titans_pytorch import (
+    MemoryAsContextTransformer,
+    MemoryMLP,
+    MemoryAttention
+)
+
+# ─────────────────────────────
+# ① トークナイザーの読み込み
+# ─────────────────────────────
+tokenizer = AutoTokenizer.from_pretrained("weblab-GENIAC/Tanuki-8B-dpo-v1.0")
+NUM_TOKENS = tokenizer.vocab_size
+
+# ─────────────────────────────
+# ② ハイパーパラメータ設定（総パラメータ数約500Mを目指す）
+# ─────────────────────────────
+NUM_BATCHES = int(1e5)
+BATCH_SIZE = 4
+GRADIENT_ACCUMULATE_EVERY = 4
+LEARNING_RATE = 2e-4
+VALIDATE_EVERY  = 100
+GENERATE_EVERY  = 500
+PRIME_LENGTH = 100
+GENERATE_LENGTH =512
+SHOULD_GENERATE = True
+SEQ_LEN = 1024
+
+# neural memory 関連の設定（パラメータ数拡大のため調整）
+NEURAL_MEMORY_DEPTH = 2
+NUM_PERSIST_MEM = 16
+NUM_LONGTERM_MEM = 16
+# 2から24まで偶数層に対して neural memory を適用
+NEURAL_MEM_LAYERS = tuple(range(2, 25, 2))
+NEURAL_MEM_GATE_ATTN_OUTPUT = False
+NEURAL_MEM_MOMENTUM = True
+NEURAL_MEM_MOMENTUM_ORDER = 1
+NEURAL_MEM_QK_NORM = True
+NEURAL_MEM_MAX_LR = 1e-1
+USE_MEM_ATTENTION_MODEL = False
+WINDOW_SIZE = 128  # セグメント長を128に増加
+NEURAL_MEM_SEGMENT_LEN = 16
+NEURAL_MEM_BATCH_SIZE = 128
+SLIDING_WINDOWS = True
+STORE_ATTN_POOL_CHUNKS = True
+MEMORY_MODEL_PER_LAYER_LEARNED_LR = True
+NEURAL_MEM_WEIGHT_RESIDUAL = True
+NEURAL_MEM_QKV_RECEIVES_DIFF_VIEW = True
+
+# モデルの大きさ設定（0.5Bパラメータに向けて拡大）
+MODEL_DIM = 1024
+MODEL_DEPTH = 24
+
+PROJECT_NAME = 'titans-mac-transformer-0.5B'
 RUN_NAME = f'mac - {NUM_LONGTERM_MEM} longterm mems, layers {NEURAL_MEM_LAYERS}'
-WANDB_ONLINE = True
-wandb.init(project=PROJECT_NAME, mode='online' if WANDB_ONLINE else 'offline')
+WANDB_ONLINE = False
+
+import wandb
+wandb.init(project = PROJECT_NAME, mode = 'disabled' if not WANDB_ONLINE else 'online')
 wandb.run.name = RUN_NAME
 wandb.run.save()
-set_seed(123)
-# -----------------------------
-# Streaming 用 IterableDataset
-# -----------------------------
-class StreamingJsonlGzDataset(IterableDataset):
-    def __init__(self, file_patterns, seq_len, tokenizer):
-        """
-        file_patterns: glob パターンのリスト
-          例：
-            [
-              "/mnt/shimo/Pretrain_corpus/en_wiki/train_*.jsonl.gz",
-              "/mnt/shimo/Pretrain_corpus/ja_wiki/train_*.jsonl.gz",
-              "/mnt/shimo/Pretrain_corpus/level0/CC-MAIN-2013-2016.jsonl.gz"
-            ]
-        seq_len: 最大シーケンス長（例: 4096）
-        tokenizer: HuggingFace のトークナイザー
-        """
-        self.file_patterns = file_patterns
-        self.seq_len = seq_len
-        self.tokenizer = tokenizer
-        self.file_list = []
-        for pattern in file_patterns:
-            files = glob.glob(pattern)
-            self.file_list.extend(files)
-        print(f"Found {len(self.file_list)} files for patterns: {file_patterns}")
 
-    def __iter__(self):
-        for file_path in self.file_list:
-            with gzip.open(file_path, 'rt', encoding="utf-8") as f:
-                for line in f:
-                    try:
-                        data = json.loads(line)
-                        if "text" in data:
-                            text = data["text"]
-                            enc = self.tokenizer(text, truncation=True, max_length=self.seq_len, return_tensors="pt")
-                            yield enc["input_ids"].squeeze(0)
-                    except Exception as e:
-                        continue
-# -----------------------------
-# ファイルパス設定
-# -----------------------------
-base_dir = "/mnt/shimo/Pretrain_corpus"
-train_file_patterns = [
-    os.path.join(base_dir, "en_wiki", "train_*.jsonl.gz"),
-    os.path.join(base_dir, "ja_wiki", "train_*.jsonl.gz"),
-    os.path.join(base_dir, "level0", "CC-MAIN-2013-2016.jsonl.gz")
-]
-en_val_pattern = os.path.join(base_dir, "en_wiki", "validation_0.jsonl.gz")
-ja_val_pattern = os.path.join(base_dir, "ja_wiki", "validation_0.jsonl.gz")
-# -----------------------------
-# トークナイザーのロード
-# -----------------------------
-tokenizer = AutoTokenizer.from_pretrained("sbintuitions/sarashina2.2-0.5b-instruct-v0.1")
-# -----------------------------
-# Dataset, DataLoader の作成
-# -----------------------------
-SEQ_LEN = 2048
-train_dataset = StreamingJsonlGzDataset(train_file_patterns, seq_len=SEQ_LEN, tokenizer=tokenizer)
-en_val_dataset = StreamingJsonlGzDataset([en_val_pattern], seq_len=SEQ_LEN, tokenizer=tokenizer)
-ja_val_dataset = StreamingJsonlGzDataset([ja_val_pattern], seq_len=SEQ_LEN, tokenizer=tokenizer)
-# collate関数を定義
-def pad_collate_fn(batch, pad_token_id=0):
-    batch = torch.nn.utils.rnn.pad_sequence(batch, batch_first=True, padding_value=pad_token_id)
-    return batch
-# トークナイザーからパディングトークンを取得
-pad_token_id = tokenizer.pad_token_id if tokenizer.pad_token_id is not None else tokenizer.eos_token_id
-# DataLoaderの定義（collate_fnを指定）
-train_loader = DataLoader(train_dataset,batch_size=1,num_workers=1,collate_fn=lambda batch: pad_collate_fn(batch, pad_token_id))
-en_val_loader = DataLoader(en_val_dataset,batch_size=1,num_workers=1,collate_fn=lambda batch: pad_collate_fn(batch, pad_token_id))
-ja_val_loader = DataLoader(ja_val_dataset,batch_size=1,num_workers=1,collate_fn=lambda batch: pad_collate_fn(batch, pad_token_id))
-# -----------------------------
-# モデル初期化（MAC の設定）
-# -----------------------------
-from titans_pytorch import MemoryAsContextTransformer, MemoryMLP, MemoryAttention
-USE_MEM_ATTENTION_MODEL = False
-NEURAL_MEMORY_DEPTH = 2
+# ─────────────────────────────
+# ③ ヘルパー関数
+# ─────────────────────────────
+def cycle(loader):
+    while True:
+        for data in loader:
+            yield data
+
+def decode_token(token):
+    return str(chr(max(32, token)))
+
+def decode_tokens(tokens):
+    return ''.join(list(map(decode_token, tokens)))
+
+# ─────────────────────────────
+# ④ memory model の設定
+# ─────────────────────────────
 if USE_MEM_ATTENTION_MODEL:
-    neural_memory_model = MemoryAttention(dim=80)
+    neural_memory_model = MemoryAttention(dim = 64)
 else:
-    neural_memory_model = MemoryMLP(dim=80, depth=NEURAL_MEMORY_DEPTH)
+    neural_memory_model = MemoryMLP(dim = 64, depth = NEURAL_MEMORY_DEPTH)
 
+# ─────────────────────────────
+# ⑤ MemoryAsContextTransformer のインスタンス作成
+# ─────────────────────────────
 model = MemoryAsContextTransformer(
-    num_tokens=102400,
-    dim=1120,
-    depth=22,
-    segment_len=128,
-    num_persist_mem_tokens=8,
-    num_longterm_mem_tokens=8,
-    neural_memory_layers=(3,6,9,12,15,18,21),
-    neural_memory_segment_len=16,
-    neural_memory_batch_size=128,
-    neural_mem_gate_attn_output=False,
-    neural_mem_weight_residual=True,
-    neural_memory_qkv_receives_diff_views=True,
-    use_flex_attn=False,
-    #use_flex_attn=True,
-    sliding_window_attn=True,
-    neural_memory_model=neural_memory_model,
-    neural_memory_kwargs=dict(
-        dim_head=80,
-        heads=14,
-        attn_pool_chunks=True,
-        qk_rmsnorm=True,
-        momentum=True,
-        momentum_order=1,
-        default_step_transform_max_lr=1e-1,
-        use_accelerated_scan=True,
-        per_parameter_lr_modulation=True
-    ),
-    ff_mult=3
+    num_tokens = NUM_TOKENS,
+    dim = MODEL_DIM,
+    depth = MODEL_DEPTH,
+    segment_len = WINDOW_SIZE,
+    num_persist_mem_tokens = NUM_PERSIST_MEM,
+    num_longterm_mem_tokens = NUM_LONGTERM_MEM,
+    neural_memory_layers = NEURAL_MEM_LAYERS,
+    neural_memory_segment_len = NEURAL_MEM_SEGMENT_LEN,
+    neural_memory_batch_size = NEURAL_MEM_BATCH_SIZE,
+    neural_mem_gate_attn_output = NEURAL_MEM_GATE_ATTN_OUTPUT,
+    neural_mem_weight_residual = NEURAL_MEM_WEIGHT_RESIDUAL,
+    neural_memory_qkv_receives_diff_views = NEURAL_MEM_QKV_RECEIVES_DIFF_VIEW,
+    use_flex_attn = True,
+    sliding_window_attn = SLIDING_WINDOWS,
+    neural_memory_model = neural_memory_model,
+    neural_memory_kwargs = dict(
+        dim_head = 64,
+        heads = 16,
+        attn_pool_chunks = STORE_ATTN_POOL_CHUNKS,
+        qk_rmsnorm = NEURAL_MEM_QK_NORM,
+        momentum = NEURAL_MEM_MOMENTUM,
+        momentum_order = NEURAL_MEM_MOMENTUM_ORDER,
+        default_step_transform_max_lr = NEURAL_MEM_MAX_LR,
+        use_accelerated_scan = True,
+        per_parameter_lr_modulation = MEMORY_MODEL_PER_LAYER_LEARNED_LR
+    )
 ).cuda()
 
-# -----------------------------
-# オプティマイザの設定
-# -----------------------------
-from adam_atan2_pytorch import AdoptAtan2
-optimizer = AdoptAtan2(model.parameters(), lr=2e-4)
+# ─────────────────────────────
+# ⑥ データの準備（enwik8データセット）
+# ─────────────────────────────
+with gzip.open('./data/enwik8.gz') as file:
+    data = np.frombuffer(file.read(int(95e6)), dtype = np.uint8).copy()
+    data_train, data_val = np.split(data, [int(90e6)])
+    data_train, data_val = map(torch.from_numpy, (data_train, data_val))
 
-# -----------------------------
-# チェックポイント保存設定
-# -----------------------------
-checkpoint_dir = "/home/shimomura/Devenv/checkpoint/"
-os.makedirs(checkpoint_dir, exist_ok=True)
+class TextSamplerDataset(Dataset):
+    def __init__(self, data, seq_len):
+        super().__init__()
+        self.data = data
+        self.seq_len = seq_len
 
-def save_checkpoint(step, epoch):
-    ckpt_path = os.path.join(checkpoint_dir, f"epoch_{epoch}_step_{step}.pt")
-    torch.save(model.state_dict(), ckpt_path)
-    # チェックポイントが10個を超えたら、古いものから削除
-    ckpt_files = sorted(glob.glob(os.path.join(checkpoint_dir, "*.pt")), key=os.path.getmtime)
-    if len(ckpt_files) > 10:
-        files_to_remove = ckpt_files[:len(ckpt_files) - 10]
-        for f in files_to_remove:
-            os.remove(f)
-    print(f"Checkpoint saved at step {step}, epoch {epoch}")
+    def __getitem__(self, index):
+        rand_start = torch.randint(0, self.data.size(0) - self.seq_len, (1,))
+        full_seq = self.data[rand_start: rand_start + self.seq_len + 1].long()
+        return full_seq.cuda()
 
-# -----------------------------
-# 学習ループ（単一GPU）
-# -----------------------------
+    def __len__(self):
+        return self.data.size(0) // self.seq_len
 
+train_dataset = TextSamplerDataset(data_train, SEQ_LEN)
+val_dataset   = TextSamplerDataset(data_val, SEQ_LEN)
+train_loader  = cycle(DataLoader(train_dataset, batch_size = BATCH_SIZE))
+val_loader    = cycle(DataLoader(val_dataset, batch_size = BATCH_SIZE))
 
-num_epochs = 1  # epoch0 とする
-grad_accum_steps = 1  # バッチサイズ4×8 = 実質32
-model.train()
-step_count = 0
-# for epoch in range(num_epochs):
-#     for batch in train_loader:
-#         # 各サンプルは [seq_len] テンソルなので、pad_sequence で [batch, seq_len] に変換
-#         batch = torch.nn.utils.rnn.pad_sequence(batch, batch_first=True, padding_value=0).cuda()
-#         loss = model(batch, return_loss=True)
-#         loss.backward()
-#         step_count += 1
-#         if step_count % grad_accum_steps == 0:
-#             torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)
-#             optimizer.step()
-#             optimizer.zero_grad()
-#         if step_count % 100 == 0:
-#             print(f"Epoch {epoch} Step {step_count}: Loss = {loss.item()}")
-#             wandb.log({"train_loss": loss.item(), "step": step_count, "epoch": epoch})
-#         # 3000ステップごとにチェックポイント保存
-#         if step_count % 3000 == 0:
-#             save_checkpoint(step_count, epoch)
-#     # -----------------------------
-#     # 検証ループ（英語）
-#     # -----------------------------
-#     model.eval()
-#     en_val_losses = []
-#     with torch.no_grad():
-#         for batch in en_val_loader:
-#             batch = torch.nn.utils.rnn.pad_sequence(batch, batch_first=True, padding_value=0).cuda()
-#             loss = model(batch, return_loss=True)
-#             en_val_losses.append(loss.item())
-#     avg_en_val = sum(en_val_losses) / len(en_val_losses) if en_val_losses else 0.0
-#     print(f"Epoch {epoch} English Validation Loss: {avg_en_val}")
-#     wandb.log({"en_val_loss": avg_en_val, "epoch": epoch})
-#     # -----------------------------
-#     # 検証ループ（日本語）
-#     # -----------------------------
-#     ja_val_losses = []
-#     with torch.no_grad():
-#         for batch in ja_val_loader:
-#             batch = torch.nn.utils.rnn.pad_sequence(batch, batch_first=True, padding_value=0).cuda()
-#             loss = model(batch, return_loss=True)
-#             ja_val_losses.append(loss.item())
-#     avg_ja_val = sum(ja_val_losses) / len(ja_val_losses) if ja_val_losses else 0.0
-#     print(f"Epoch {epoch} Japanese Validation Loss: {avg_ja_val}")
-#     wandb.log({"ja_val_loss": avg_ja_val, "epoch": epoch})
-#     # -----------------------------
-#     # エポック終了時のチェックポイント保存（必要なら）
-#     # -----------------------------
-#     save_checkpoint(step_count, epoch)
-#     model.train()
+optim = AdoptAtan2(model.parameters(), lr = LEARNING_RATE)
 
-# AMP用のGradScalerを初期化
+# ─────────────────────────────
+# ⑦ fp16学習のための GradScaler の導入
+# ─────────────────────────────
 scaler = torch.cuda.amp.GradScaler()
 
-model.train()
-step_count = 0
-for epoch in range(num_epochs):
-    for batch in train_loader:
-        # バッチのパディングとGPUへの転送
-        batch = torch.nn.utils.rnn.pad_sequence(batch, batch_first=True, padding_value=0).cuda()
-
-        optimizer.zero_grad()
-
-        # autocast コンテキストで順伝播を実行（fp16で計算）
-        with torch.cuda.amp.autocast():
-            loss = model(batch, return_loss=True)
-
-        # スケーラーを用いて逆伝播
-        scaler.scale(loss).backward()
-
-        step_count += 1
-        if step_count % grad_accum_steps == 0:
-            torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)
-            # スケール済みの勾配でパラメータ更新
-            scaler.step(optimizer)
-            scaler.update()
-            optimizer.zero_grad()
-
-        if step_count % 100 == 0:
-            print(f"Epoch {epoch} Step {step_count}: Loss = {loss.item()}")
-            wandb.log({"train_loss": loss.item(), "step": step_count, "epoch": epoch})
-
-        if step_count % 3000 == 0:
-            save_checkpoint(step_count, epoch)
-
-    # 検証ループも同様に autocast を利用して評価
-    model.eval()
-    en_val_losses = []
-    with torch.no_grad():
-        for batch in en_val_loader:
-            batch = torch.nn.utils.rnn.pad_sequence(batch, batch_first=True, padding_value=0).cuda()
-            with torch.cuda.amp.autocast():
-                loss = model(batch, return_loss=True)
-            en_val_losses.append(loss.item())
-    avg_en_val = sum(en_val_losses) / len(en_val_losses) if en_val_losses else 0.0
-    print(f"Epoch {epoch} English Validation Loss: {avg_en_val}")
-    wandb.log({"en_val_loss": avg_en_val, "epoch": epoch})
-
-    # 日本語検証ループ
-    ja_val_losses = []
-    with torch.no_grad():
-        for batch in ja_val_loader:
-            batch = torch.nn.utils.rnn.pad_sequence(batch, batch_first=True, padding_value=0).cuda()
-            with torch.cuda.amp.autocast():
-                loss = model(batch, return_loss=True)
-            ja_val_losses.append(loss.item())
-    avg_ja_val = sum(ja_val_losses) / len(ja_val_losses) if ja_val_losses else 0.0
-    print(f"Epoch {epoch} Japanese Validation Loss: {avg_ja_val}")
-    wandb.log({"ja_val_loss": avg_ja_val, "epoch": epoch})
-
-    save_checkpoint(step_count, epoch)
+# ─────────────────────────────
+# ⑧ 学習ループ（自動混合精度 fp16 でトレーニング）
+# ─────────────────────────────
+for i in tqdm.tqdm(range(NUM_BATCHES), mininterval = 10., desc = 'training'):
     model.train()
-
-
+    for __ in range(GRADIENT_ACCUMULATE_EVERY):
+        with torch.cuda.amp.autocast():
+            loss = model(next(train_loader), return_loss = True)
+        scaler.scale(loss).backward()
+    print(f'training loss: {loss.item()}')
+    torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)
+    scaler.step(optim)
+    scaler.update()
+    optim.zero_grad()
+    wandb.log(dict(loss = loss.item()))
+    if i % VALIDATE_EVERY == 0:
+        model.eval()
+        with torch.no_grad(), torch.cuda.amp.autocast():
+            loss = model(next(val_loader), return_loss = True)
+            print(f'validation loss: {loss.item()}')
+    if SHOULD_GENERATE and i % GENERATE_EVERY == 0:
+        model.eval()
+        inp = random.choice(val_dataset)[:PRIME_LENGTH]
+        prime = decode_tokens(inp)
+        print(f'{prime} \n\n {"*" * 100}')
+        sample = model.sample(inp[None, ...], GENERATE_LENGTH, use_cache = False)
+        output_str = decode_tokens(sample[0])
+        print(output_str)

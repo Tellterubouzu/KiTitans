@@ -19,7 +19,7 @@ from titans_pytorch import (
 # constants
 
 NUM_BATCHES = int(1e5)
-BATCH_SIZE = 16
+BATCH_SIZE = 32
 GRADIENT_ACCUMULATE_EVERY = 4
 LEARNING_RATE = 2e-4
 VALIDATE_EVERY  = 100
@@ -54,7 +54,7 @@ NEURAL_MEM_QKV_RECEIVES_DIFF_VIEW = True        # will allow the neural memory t
 
 PROJECT_NAME = 'titans-mac-transformer'
 RUN_NAME = f'mac - {NUM_LONGTERM_MEM} longterm mems, layers {NEURAL_MEM_LAYERS}'
-WANDB_ONLINE = False # turn this on to pipe experiment to cloud
+WANDB_ONLINE = True # turn this on to pipe experiment to cloud
 
 # perf related
 
@@ -163,8 +163,8 @@ for i in tqdm.tqdm(range(NUM_BATCHES), mininterval = 10., desc = 'training'):
     for __ in range(GRADIENT_ACCUMULATE_EVERY):
         loss = model(next(train_loader), return_loss = True)
         loss.backward()
-
-    print(f'training loss: {loss.item()}')
+    if i % VALIDATE_EVERY == 0:
+        print(f'training loss: {loss.item()}')
     torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)
     optim.step()
     optim.zero_grad()
