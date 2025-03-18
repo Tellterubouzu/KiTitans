@@ -5,6 +5,7 @@ import gzip
 import numpy as np
 import tqdm
 import os
+import shutil  # 追加：ディレクトリ削除用
 
 import torch
 from torch import nn, Tensor
@@ -252,6 +253,25 @@ def main():
             output_str = safe_decode(sample[0].tolist())
             if local_rank == 0:
                 print(output_str)
+
+        # ----- 1000毎にチェックポイント保存（最大10個まで保持） -----
+        # if i % 1000 == 0 and i !=0:
+        if i %1000==0:
+            checkpoint_dir = "./checkpoints"
+            os.makedirs(checkpoint_dir, exist_ok=True)
+            # 保存済みチェックポイント（ディレクトリ名が "step-<数字>" のもの）を取得
+            existing_checkpoints = [
+                d for d in os.listdir(checkpoint_dir)
+                if d.startswith("step-") and os.path.isdir(os.path.join(checkpoint_dir, d))
+            ]
+            # 10個以上になったら、最も古いチェックポイントを削除
+            if len(existing_checkpoints) >= 12:
+                existing_checkpoints = sorted(existing_checkpoints, key=lambda x: int(x.split('-')[-1]))
+                oldest_checkpoint = existing_checkpoints[0]
+                shutil.rmtree(os.path.join(checkpoint_dir, oldest_checkpoint))
+                print(f"Removed oldest checkpoint: {oldest_checkpoint}")
+            model_engine.save_checkpoint(checkpoint_dir, tag=f"step-{i}")
+            print(f"Saved checkpoint: step-{i}")
 
 if __name__ == "__main__":
     main()

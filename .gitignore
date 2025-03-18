@@ -3,3 +3,5 @@
 Pretrain/wandb
 **.gz
 epoch_datasets
+wandb/
+checkpoints/
