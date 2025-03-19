@@ -1,7 +1,8 @@
 .env
 **__pycache__**
-Pretrain/wandb
 **.gz
-epoch_datasets
-wandb/
-checkpoints/
+Pretrain/epoch_datasets/
+Pretrain/data/hf_datasets_pretrain/
+Pretrain/data/hf_datasets_pretrain_train/
+Pretrain/checkpoints
+Pretrain/wandb

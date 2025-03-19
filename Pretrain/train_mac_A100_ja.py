@@ -4,15 +4,22 @@ import random
 import numpy as np
 import tqdm
 import os
+import datetime
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
+os.environ["TORCH_DISTRIBUTED_DEFAULT_TIMEOUT"] = str(datetime.timedelta(hours=1))
+
 import shutil
+import math
+from itertools import chain, islice
 
 import torch
 from torch.utils.data import DataLoader, IterableDataset
 
 # huggingface datasets
-from datasets import load_dataset, interleave_datasets
+from datasets import load_dataset
 
-from transformers import AutoTokenizer
+# AutoTokenizer に加え、cosineスケジューラー用の関数をインポート
+from transformers import AutoTokenizer, get_cosine_schedule_with_warmup
 
 from adam_atan2_pytorch import AdoptAtan2
 from titans_pytorch import (
@@ -22,20 +29,7 @@ from titans_pytorch import (
 )
 
 import deepspeed
-
-# wandb 初期化（local_rank == 0 の場合のみ）
 local_rank = int(os.environ.get("LOCAL_RANK", 0))
-if local_rank == 0:
-    import wandb
-    WANDB_AVAILABLE = True
-    PROJECT_NAME = 'titans-mac-transformer-0.3B-ja-base'
-    RUN_NAME = f'mac - {16} longterm mems, layers {(2,4,6,8,10,12,14)}'
-    WANDB_ONLINE = True
-    wandb.init(project=PROJECT_NAME, mode='disabled' if not WANDB_ONLINE else 'online')
-    wandb.run.name = RUN_NAME
-    wandb.run.save()
-else:
-    WANDB_AVAILABLE = False
 
 # ─────────────────────────────
 # ① トークナイザーの読み込み（fast tokenizer を使用）
@@ -46,7 +40,6 @@ NUM_TOKENS = tokenizer.vocab_size
 # ─────────────────────────────
 # ② ハイパーパラメータ設定
 # ─────────────────────────────
-NUM_BATCHES = 55000
 BATCH_SIZE = 4
 GRADIENT_ACCUMULATE_EVERY = 5
 LEARNING_RATE = 2e-4
@@ -57,7 +50,7 @@ GENERATE_LENGTH = 512
 SHOULD_GENERATE = True
 SEQ_LEN = 1024
 
-# neural memory 関連など
+# neural memory 関連
 NEURAL_MEMORY_DEPTH = 2
 NUM_PERSIST_MEM = 16
 NUM_LONGTERM_MEM = 16
@@ -80,25 +73,34 @@ NEURAL_MEM_QKV_RECEIVES_DIFF_VIEW = True
 MODEL_DIM = 1024
 MODEL_DEPTH = 15
 
+NUM_BATCHES = 5490
+
 # ─────────────────────────────
-# ③ Hugging Face Datasets の読み込みと IterableDataset の作成
+# ③ 各データセット（streaming版）のロードと変換処理
 # ─────────────────────────────
-class HuggingfaceJaIterableDataset(IterableDataset):
-    """
-    Hugging Face Datasets の 'ja' カラムを使用して、
-    シーケンス長 seq_len のブロックを次々と返す IterableDataset
-    """
-    def __init__(self, hf_dataset, tokenizer, seq_len):
+
+# SyntheticText： "output_text" を使用
+dataset_text_stream = load_dataset(
+    "kanhatakeyama/SyntheticText",
+    split="train",
+    streaming=True
+)
+
+# ─────────────────────────────
+# ③-2 カスタム IterableDataset の定義
+# ─────────────────────────────
+class CustomIterableDataset(IterableDataset):
+    def __init__(self, dataset, tokenizer, seq_len, transform_fn):
         super().__init__()
-        self.dataset = hf_dataset  # これはすでに streaming=True で読み込んだもの
+        self.dataset = dataset
         self.tokenizer = tokenizer
         self.seq_len = seq_len
+        self.transform_fn = transform_fn
 
     def __iter__(self):
         buffer = []
         for sample in self.dataset:
-            # sample["ja"] を対象にトークナイズ
-            text = sample["ja"] if isinstance(sample["ja"], str) else ""
+            text = self.transform_fn(sample)
             token_ids = self.tokenizer.encode(text, add_special_tokens=False)
             buffer.extend(token_ids)
             while len(buffer) >= self.seq_len:
@@ -109,31 +111,34 @@ class HuggingfaceJaIterableDataset(IterableDataset):
                 }
                 buffer = buffer[self.seq_len:]
 
-# 3つのデータセットを読み込み (train split, streaming)
-dataset_wiki = load_dataset("kanhatakeyama/SyntheticTextWikiTranslate", split="train", streaming=True)
-dataset_text = load_dataset("kanhatakeyama/SyntheticText", split="train", streaming=True)
-dataset_cc   = load_dataset("kanhatakeyama/SyntheticTextCC", split="train", streaming=True)
+# wandb 初期化（local_rank == 0 の場合のみ）
+local_rank = int(os.environ.get("LOCAL_RANK", 0))
+if local_rank == 0:
+    import wandb
+    WANDB_AVAILABLE = True
+    PROJECT_NAME = 'titans-mac-transformer-0.3B'
+    RUN_NAME = f'titans-mac-transformer-0.3B-base-ja-curricuram (longterm mems, layers {(2,4,6,8,10,12,14)})(03/20/2:42)'
+    WANDB_ONLINE = True
+    wandb.init(project=PROJECT_NAME, mode='disabled' if not WANDB_ONLINE else 'online')
+    wandb.run.name = RUN_NAME
+    wandb.run.save()
+else:
+    WANDB_AVAILABLE = False
 
-# 3つのデータセットを interleave して混在
-# (interleave_datasets は、同時に複数のストリーミングを行いランダムに混在させる)
-combined_dataset = interleave_datasets([dataset_wiki, dataset_text, dataset_cc])
+# 各データセットごとに IterableDataset を作成
+iterable_text = CustomIterableDataset(dataset_text_stream, tokenizer, SEQ_LEN, lambda sample: sample.get("output_text", ""))
 
-# 学習用の IterableDataset
-train_dataset_iter = HuggingfaceJaIterableDataset(combined_dataset, tokenizer, SEQ_LEN)
-train_loader = DataLoader(train_dataset_iter, batch_size=BATCH_SIZE)
+print("#Loading train ")
+train_loader = DataLoader(iterable_text, batch_size=BATCH_SIZE, num_workers=0, pin_memory=True)
 
 # ─────────────────────────────
-# ④ 検証用データセットを取得する関数（先頭から固定数ブロックを取得する例）
+# ④ 検証用データセット（SyntheticText の先頭5件から1ブロック）
 # ─────────────────────────────
-def get_validation_blocks(hf_dataset, tokenizer, seq_len, max_blocks=10):
-    """
-    検証用に、先頭から少しだけブロックを作る。
-    streaming=False で読み込んだ dataset を渡すことを想定
-    """
+def get_validation_blocks(hf_dataset, tokenizer, seq_len, max_blocks=1):
     blocks = []
     buffer = []
     for sample in hf_dataset:
-        text = sample["ja"] if isinstance(sample["ja"], str) else ""
+        text = sample.get("output_text", "")
         token_ids = tokenizer.encode(text, add_special_tokens=False)
         buffer.extend(token_ids)
         while len(buffer) >= seq_len and len(blocks) < max_blocks:
@@ -147,20 +152,17 @@ def get_validation_blocks(hf_dataset, tokenizer, seq_len, max_blocks=10):
             break
     return blocks
 
-# 検証用：3つのデータセットの train split を "ストリーミングなし" で読み込み、
-# 先頭から max_blocks 分だけを取得（本来は validation split があればそちらを使うのが望ましい）
-dataset_wiki_val = load_dataset(
-    "kanhatakeyama/SyntheticTextWikiTranslate",
-    split="train",  # full train
-    streaming=False
+# streaming なので islice を使って先頭5件を抽出
+dataset_text_val = load_dataset(
+    "kanhatakeyama/SyntheticText",
+    split="train",
+    streaming=True
 )
+val_samples = list(islice(dataset_text_val, 5))
 
-# 先頭500件だけ取得
-dataset_wiki_val = dataset_wiki_val.select(range(500))
-# concatenate_datasets は streaming=False の場合のみ使用可能
-# ここでは簡易的に wiki だけを検証用として使う例にします
-val_blocks = get_validation_blocks(dataset_wiki_val, tokenizer, SEQ_LEN, max_blocks=1)
-val_loader = DataLoader(val_blocks, batch_size=BATCH_SIZE)
+print("#Loading val ")
+val_blocks = get_validation_blocks(val_samples, tokenizer, SEQ_LEN, max_blocks=1)
+val_loader = DataLoader(val_blocks, batch_size=BATCH_SIZE, num_workers=0, pin_memory=True)
 
 # ─────────────────────────────
 # ⑤ memory model の設定
@@ -207,12 +209,20 @@ model = MemoryAsContextTransformer(
 # ─────────────────────────────
 optim = AdoptAtan2(model.parameters(), lr=LEARNING_RATE)
 
+# ⑦.5 ウォームアップ＋コサイン減衰スケジューラーの設定
+WARMUP_RATIO = 0.1
+warmup_steps = int(NUM_BATCHES * WARMUP_RATIO)
+scheduler = get_cosine_schedule_with_warmup(optim, num_warmup_steps=warmup_steps, num_training_steps=NUM_BATCHES)
+
 # ─────────────────────────────
 # safe_decode 関数（デコード時のエラーハンドリング用）
 # ─────────────────────────────
 def safe_decode(token_list):
-    s = "".join([chr(max(32, t)) for t in token_list])
-    return s.encode("utf-8", "replace").decode("utf-8")
+    try:
+        return tokenizer.decode(token_list, skip_special_tokens=False)
+    except Exception as e:
+        s = "".join([chr(max(32, t)) for t in token_list])
+        return s.encode("utf-8", "replace").decode("utf-8")
 
 # ─────────────────────────────
 # ⑧ DeepSpeed による初期化と学習ループ
@@ -229,28 +239,43 @@ def main():
         model_parameters=model.parameters()
     )
 
-    # 学習ループ
-    train_iter = iter(train_loader)  # DataLoader はイテレータ化
+    train_iter = iter(train_loader)
+
     for i in tqdm.tqdm(range(NUM_BATCHES), mininterval=50., desc='training'):
         model_engine.train()
+
         for __ in range(GRADIENT_ACCUMULATE_EVERY):
             try:
                 batch = next(train_iter)
             except StopIteration:
-                # データが足りない場合は再度イテレータを作り直す
                 train_iter = iter(train_loader)
                 batch = next(train_iter)
+
             input_ids = batch["input_ids"].to(model_engine.device)
             loss = model_engine(input_ids, return_loss=True)
             model_engine.backward(loss)
-        model_engine.step()
+        total_norm = 0.0
+        for p in model_engine.module.parameters():
+            if p.grad is not None:
+                param_norm = p.grad.data.norm(2).item()
+                total_norm += param_norm * param_norm
+        grad_norm = total_norm ** 0.5
 
         if local_rank == 0:
-            print(f"training loss: {loss.item()}")
+            loss_val = loss.item()
+            perplexity = math.exp(loss_val) if loss_val < 20 else float('inf')
+            current_lr = optimizer.param_groups[0]['lr']
+            if i %10 ==0:
+                print(f"training loss: {loss_val}, perplexity: {perplexity}, lr: {current_lr}, grad_norm: {grad_norm}")
             if WANDB_AVAILABLE:
-                wandb.log(dict(loss=loss.item()))
-
-        # 検証
+                wandb.log({
+                    'loss': loss_val,
+                    'perplexity': perplexity,
+                    'lr': current_lr,
+                    'grad_norm': grad_norm
+                })
+        model_engine.step()
+        scheduler.step()
         if i % VALIDATE_EVERY == 0:
             model_engine.eval()
             with torch.no_grad():
@@ -258,11 +283,15 @@ def main():
                 val_input_ids = val_batch["input_ids"].to(model_engine.device)
                 val_loss = model_engine(val_input_ids, return_loss=True)
             if local_rank == 0:
-                print(f"validation loss: {val_loss.item()}")
+                val_loss_val = val_loss.item()
+                val_perplexity = math.exp(val_loss_val) if val_loss_val < 20 else float('inf')
+                print(f"validation loss: {val_loss_val}, val_perplexity: {val_perplexity}")
                 if WANDB_AVAILABLE:
-                    wandb.log(dict(val_loss=val_loss.item()))
+                    wandb.log({
+                        'val_loss': val_loss_val,
+                        'val_perplexity': val_perplexity
+                    })
 
-        # テキスト生成
         if SHOULD_GENERATE and i % GENERATE_EVERY == 0:
             model_engine.eval()
             inp = random.choice(val_blocks)["input_ids"][:PRIME_LENGTH].to(model_engine.device, non_blocking=True)
@@ -273,8 +302,9 @@ def main():
             output_str = safe_decode(sample[0].tolist())
             if local_rank == 0:
                 print(output_str)
+                if WANDB_AVAILABLE:
+                    wandb.log({"generated_text": output_str})
 
-        # チェックポイント保存
         if i % 1000 == 0 and i != 0:
             checkpoint_dir = "./checkpoints"
             os.makedirs(checkpoint_dir, exist_ok=True)
@@ -282,7 +312,6 @@ def main():
                 d for d in os.listdir(checkpoint_dir)
                 if d.startswith("step-") and os.path.isdir(os.path.join(checkpoint_dir, d))
             ]
-            # 古いものを削除 (12個以上あれば最古を消す)
             if len(existing_checkpoints) >= 12:
                 existing_checkpoints = sorted(existing_checkpoints, key=lambda x: int(x.split('-')[-1]))
                 oldest_checkpoint = existing_checkpoints[0]
@@ -291,6 +320,10 @@ def main():
 
             model_engine.save_checkpoint(checkpoint_dir, tag=f"step-{i}")
             print(f"Saved checkpoint: step-{i}")
+    final_model_dir = "./KiTitans-MAC-Transformer-0.3B-base-SyntheticText"
+    os.makedirs(final_model_dir, exist_ok=True)
+    model_engine.save_checkpoint(final_model_dir, tag="final")
+    print("Final model saved to", final_model_dir)
 
 
 if __name__ == "__main__":
