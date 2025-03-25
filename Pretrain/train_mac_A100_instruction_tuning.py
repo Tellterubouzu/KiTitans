@@ -35,12 +35,24 @@ local_rank = int(os.environ.get("LOCAL_RANK", 0))
 # ① トークナイザーの読み込み（fast tokenizer を使用）
 # ─────────────────────────────
 tokenizer = AutoTokenizer.from_pretrained("weblab-GENIAC/Tanuki-8B-dpo-v1.0", use_fast=True)
+# special_tokens = {"additional_special_tokens": ["<|user|>", "<|system|>", "<|assistant|>"]}
+# tokenizer.add_special_tokens(special_tokens)
 NUM_TOKENS = tokenizer.vocab_size
+
+def format_inst(sample):
+    # サンプル内のフィールド名はデータセットに合わせて変更してください
+    instruction = sample.get("instruction", "")
+    input_text  = sample.get("input", "")
+    output_text = sample.get("output", "")
+    # 例として、以下のようにフォーマットしています
+    formatted = "<|system|> 指示: " + instruction + "\n" + \
+                "<|user|> " + input_text + "\n" + \
+                "<|assistant|> " + output_text
+    return formatted
 
 # ─────────────────────────────
 # ② ハイパーパラメータ設定
 # ─────────────────────────────
-# ※以降のエポックで使用するシーケンス長はエポックごとに変更するので、ここではもともとの値は参考程度
 BATCH_SIZE = 5  # ※後ほど各エポックで上書きします
 GRADIENT_ACCUMULATE_EVERY = 5
 LEARNING_RATE = 2e-4
@@ -74,38 +86,41 @@ NEURAL_MEM_QKV_RECEIVES_DIFF_VIEW = True
 MODEL_DIM = 1024
 MODEL_DEPTH = 15
 
-NUM_BATCHES = 25000
+NUM_BATCHES = 25000  # 総ステップ数
 
 # ─────────────────────────────
 # ③ 各データセット（streaming版）のロードと変換処理
 # ─────────────────────────────
 
-# SyntheticTextWikiTranslate： flat_map_iterable を用いて、各サンプルから "ja" と "eng" を個別サンプルに展開
 def flat_map_iterable(dataset, fn):
     for sample in dataset:
         for item in fn(sample):
             yield item
 
-raw_wiki_stream = load_dataset(
-    "kanhatakeyama/SyntheticTextWikiTranslate",
-    split="train",
+# 以下は実際のデータセット名や処理に合わせて修正してください
+dataset_inst = load_dataset(
+    "kanhatakeyama/0717-calm3-22b-random-genre-inst-sft-tsub-part",
+    split="train",  # 重複していた split 引数を修正
     streaming=True,
 ).shuffle(buffer_size=100)
-#dataset_wiki_stream = flat_map_iterable(raw_wiki_stream, lambda sample: [{"text": sample.get("ja", "")}, {"text": sample.get("eng", "")}])
-dataset_wiki_stream = flat_map_iterable(raw_wiki_stream, lambda sample: [{"text": sample.get("ja", "")}])
 
-# SyntheticTextCC： "ja" 列を使用（シャッフル）
-raw_cc_stream = load_dataset(
-    "kanhatakeyama/SyntheticTextCC",
-    split="train",
-    streaming=True,
-).shuffle(buffer_size=100)
-#dataset_cc_stream = flat_map_iterable(raw_cc_stream, lambda sample: [{"text": sample.get("ja", "")}, {"text": sample.get("eng", "")}])
-dataset_cc_stream = flat_map_iterable(raw_wiki_stream, lambda sample: [{"text": sample.get("ja", "")}])
+instruction_dataset = flat_map_iterable(dataset_inst, lambda sample: [{"text": format_inst(sample)}])
 
-# ─────────────────────────────
-# ③-2 カスタム IterableDataset の定義
-# ─────────────────────────────
+def clean_text(text):
+    # 削除対象のパターンをリストにまとめる
+    patterns = ["参考文献：", "**Related Topics:**", "**Referense:**"]
+    # 各パターンが存在する位置を調べる（見つからない場合は -1 となるので除外）
+    cut_positions = [text.find(p) for p in patterns if text.find(p) != -1]
+    # もし1つ以上のパターンが見つかった場合、最も早い位置でテキストを切る
+    if cut_positions:
+        cut_pos = min(cut_positions)
+        return text[:cut_pos].strip()
+    else:
+        return text
+
+def custom_transform(sample):
+    return clean_text(sample["text"])
+
 class CustomIterableDataset(IterableDataset):
     def __init__(self, dataset, tokenizer, seq_len, transform_fn):
         super().__init__()
@@ -119,6 +134,8 @@ class CustomIterableDataset(IterableDataset):
         for sample in self.dataset:
             text = self.transform_fn(sample)
             token_ids = self.tokenizer.encode(text, add_special_tokens=False)
+            if len(token_ids) > 1020:
+                continue
             buffer.extend(token_ids)
             while len(buffer) >= self.seq_len:
                 block = buffer[:self.seq_len]
@@ -129,22 +146,8 @@ class CustomIterableDataset(IterableDataset):
                 buffer = buffer[self.seq_len:]
 
 # ─────────────────────────────
-# wandb 初期化（local_rank == 0 の場合のみ）
+# 検証用データセットの作成
 # ─────────────────────────────
-local_rank = int(os.environ.get("LOCAL_RANK", 0))
-if local_rank == 0:
-    import wandb
-    WANDB_AVAILABLE = True
-    PROJECT_NAME = 'titans-mac-transformer-0.3B'
-    RUN_NAME = f'titans-mac-transformer-0.3B-base-Ja(03/23)-ZERO'
-    WANDB_ONLINE = True
-    wandb.init(project=PROJECT_NAME, mode='disabled' if not WANDB_ONLINE else 'online')
-    wandb.run.name = RUN_NAME
-    wandb.run.save()
-else:
-    WANDB_AVAILABLE = False
-
-# ※検証用データセット（SyntheticText の先頭5件から1ブロック）
 def get_validation_blocks(hf_dataset, tokenizer, seq_len, max_blocks=1):
     blocks = []
     buffer = []
@@ -162,18 +165,6 @@ def get_validation_blocks(hf_dataset, tokenizer, seq_len, max_blocks=1):
         if len(blocks) >= max_blocks:
             break
     return blocks
-def clean_text(text):
-    # 削除対象のパターンをリストにまとめる
-    patterns = ["参考文献：", "**Related Topics:**", "**Referense:**"]
-    # 各パターンが存在する位置を調べる（見つからない場合は -1 となるので除外）
-    cut_positions = [text.find(p) for p in patterns if text.find(p) != -1]
-    # もし1つ以上のパターンが見つかった場合、最も早い位置でテキストを切る
-    if cut_positions:
-        cut_pos = min(cut_positions)
-        return text[:cut_pos].strip()
-    else:
-        return text
-
 
 dataset_text_val = load_dataset(
     "kanhatakeyama/SyntheticText",
@@ -226,11 +217,10 @@ model = MemoryAsContextTransformer(
 ).cuda()
 
 # ─────────────────────────────
-# ⑦ オプティマイザの設定
+# ⑦ オプティマイザとスケジューラーの設定
 # ─────────────────────────────
 optim = AdoptAtan2(model.parameters(), lr=LEARNING_RATE)
 
-# ⑦.5 ウォームアップ＋コサイン減衰スケジューラーの設定
 WARMUP_RATIO = 0.1
 warmup_steps = int(NUM_BATCHES * WARMUP_RATIO)
 scheduler = get_cosine_schedule_with_warmup(optim, num_warmup_steps=warmup_steps, num_training_steps=NUM_BATCHES)
@@ -245,7 +235,24 @@ def safe_decode(token_list):
         s = "".join([chr(max(32, t)) for t in token_list])
         return s.encode("utf-8", "replace").decode("utf-8")
 
+# ─────────────────────────────
+# wandb 初期化（local_rank == 0 の場合のみ）
+# ─────────────────────────────
+if local_rank == 0:
+    import wandb
+    WANDB_AVAILABLE = True
+    PROJECT_NAME = 'titans-mac-transformer-0.3B'
+    RUN_NAME = 'titans-mac-transformer-0.3B-Instruction'
+    WANDB_ONLINE = True
+    wandb.init(project=PROJECT_NAME, mode='disabled' if not WANDB_ONLINE else 'online')
+    wandb.run.name = RUN_NAME
+    wandb.run.save()
+else:
+    WANDB_AVAILABLE = False
 
+# ─────────────────────────────
+# main 関数（学習ループを追加）
+# ─────────────────────────────
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--local_rank", type=int, default=0)
@@ -257,50 +264,39 @@ def main():
         model=model,
         model_parameters=model.parameters()
     )
-    # # ★ 学習済みのチェックポイントを読み込む
-    # checkpoint_dir = "./KiTitans-MAC-Transformer-0.3B-base-SyntheticText"
-    checkpoint_dir = "./KiTitans-MAC-Transformer-0.3B-base-SyntheticWiki"
-    tag = "epoch0"
+    # チェックポイント読み込み（必要に応じてパスやタグを変更）
+    checkpoint_dir = "/mnt/shimo/KiTitans/Pretrain/checkpoints"
+    tag = "step-13000"
     model_engine.load_checkpoint(checkpoint_dir, tag=tag)
     print(f"Checkpoint '{tag}' loaded from {checkpoint_dir}")
 
-    # エポック設定：epoch0 は10000ステップ、epoch1 は15000ステップ
-    NUM_EPOCHS = 2
-
+    NUM_EPOCHS = 1
+    steps_per_epoch = 10000  # epochあたりのステップ数
     global_step = 0
+
+    # epoch ループ
     for epoch in range(NUM_EPOCHS):
-        if epoch == 0:
-            # epoch0: seq_len を2048、バッチサイズを4、ステップ数を10000に設定
-            new_seq_len = 1024
-            bs = 5
-            num_steps = 10000
-            current_dataset = dataset_wiki_stream
-            epoch_model_dir = "./KiTitans-MAC-Transformer-0.3B-base-SyntheticWiki"
-            print("Epoch 0: Using wiki data with seq_len =", new_seq_len, ", batch_size =", bs, ", steps =", num_steps)
-            print("skip the Epoch 0 (dataset = Synthetic Wiki)")
-            continue
-        elif epoch == 1:
-            # epoch1: seq_len を4096、バッチサイズを3、ステップ数を15000に設定
-            new_seq_len = 1024
-            bs = 5
-            num_steps = 15000
-            current_dataset = dataset_cc_stream
-            epoch_model_dir = "./KiTitans-MAC-Transformer-0.3B-base-SyntheticCC"
-            print("Epoch 1: Using CC data with seq_len =", new_seq_len, ", batch_size =", bs, ", steps =", num_steps)
+        new_seq_len = 1024
+        bs = 5
+        print(f"Epoch {epoch}: Using wiki data with seq_len = {new_seq_len}, batch_size = {bs}, steps = {steps_per_epoch}")
+        # ※今回の例では、Synthetic Wiki をスキップする旨の表示は削除しています
 
         current_iterable = CustomIterableDataset(
-        current_dataset,
-        tokenizer,
-        new_seq_len,
-        lambda sample: clean_text(sample["text"])
-    )
+            instruction_dataset,
+            tokenizer,
+            new_seq_len,
+            custom_transform
+        )
         current_train_loader = DataLoader(current_iterable, batch_size=bs, num_workers=0, pin_memory=True)
         train_iter = iter(current_train_loader)
 
-        for i in tqdm.tqdm(range(num_steps), mininterval=50., desc=f'training epoch {epoch}'):
-            model_engine.train()
+        model_engine.train()
 
-            for __ in range(GRADIENT_ACCUMULATE_EVERY):
+        # epoch 内のステップループ
+        for step in range(steps_per_epoch):
+            # 勾配蓄積ループ
+            accum_loss = 0.0
+            for _ in range(GRADIENT_ACCUMULATE_EVERY):
                 try:
                     batch = next(train_iter)
                 except StopIteration:
@@ -310,10 +306,11 @@ def main():
                 input_ids = batch["input_ids"].to(model_engine.device)
                 loss = model_engine(input_ids, return_loss=True)
                 model_engine.backward(loss)
+                accum_loss += loss.item()
 
             # 勾配クリッピング（最大ノルム1.0）
             torch.nn.utils.clip_grad_norm_(model_engine.module.parameters(), max_norm=1.0)
-
+            # 勾配ノルムの計算（参考用）
             total_norm = 0.0
             for p in model_engine.module.parameters():
                 if p.grad is not None:
@@ -321,25 +318,27 @@ def main():
                     total_norm += param_norm * param_norm
             grad_norm = total_norm ** 0.5
 
-            if local_rank == 0:
-                loss_val = loss.item()
-                perplexity = math.exp(loss_val) if loss_val < 20 else float('inf')
+            # ログ出力
+            if local_rank == 0 and global_step % 10 == 0:
+                avg_loss = accum_loss / GRADIENT_ACCUMULATE_EVERY
+                perplexity = math.exp(avg_loss) if avg_loss < 20 else float('inf')
                 current_lr = optimizer.param_groups[0]['lr']
-                if global_step % 10 == 0:
-                    print(f"training loss: {loss_val}, perplexity: {perplexity}, lr: {current_lr}, grad_norm: {grad_norm}")
+                print(f"Step {global_step} | training loss: {avg_loss:.4f}, perplexity: {perplexity:.4f}, lr: {current_lr:.6f}, grad_norm: {grad_norm:.4f}")
                 if WANDB_AVAILABLE:
                     wandb.log({
-                        'loss': loss_val,
+                        'loss': avg_loss,
                         'perplexity': perplexity,
                         'lr': current_lr,
                         'grad_norm': grad_norm,
                         'epoch': epoch,
                         'global_step': global_step
                     })
+
             model_engine.step()
             scheduler.step()
+            global_step += 1
 
-
+            # 検証処理
             if global_step % VALIDATE_EVERY == 0:
                 model_engine.eval()
                 with torch.no_grad():
@@ -349,15 +348,16 @@ def main():
                 if local_rank == 0:
                     val_loss_val = val_loss.item()
                     val_perplexity = math.exp(val_loss_val) if val_loss_val < 20 else float('inf')
-                    print(f"validation loss: {val_loss_val}, val_perplexity: {val_perplexity}")
+                    print(f"Validation at step {global_step} | loss: {val_loss_val:.4f}, perplexity: {val_perplexity:.4f}")
                     if WANDB_AVAILABLE:
                         wandb.log({
                             'val_loss': val_loss_val,
                             'val_perplexity': val_perplexity,
-                            'epoch': epoch,
                             'global_step': global_step
                         })
+                model_engine.train()
 
+            # 生成処理
             if SHOULD_GENERATE and global_step % GENERATE_EVERY == 0:
                 model_engine.eval()
                 prompt = "こんにちは，"
@@ -375,7 +375,9 @@ def main():
                             "epoch": epoch,
                             "global_step": global_step
                         })
+                model_engine.train()
 
+            # チェックポイントの保存
             if global_step % 1000 == 0 and global_step != 0:
                 ckpt_dir = "./checkpoints"
                 os.makedirs(ckpt_dir, exist_ok=True)
@@ -392,17 +394,11 @@ def main():
                 model_engine.save_checkpoint(ckpt_dir, tag=f"step-{global_step}")
                 print(f"Saved checkpoint: step-{global_step}")
 
-            global_step += 1
-
-        os.makedirs(epoch_model_dir, exist_ok=True)
-        model_engine.save_checkpoint(epoch_model_dir, tag=f"epoch{epoch}")
-        print("Epoch", epoch, "model saved to", epoch_model_dir)
-
-    final_model_dir = "./KiTitans-MAC-Transformer-0.3B-base-0320"
-    os.makedirs(final_model_dir, exist_ok=True)
-    model_engine.save_checkpoint(final_model_dir, tag="final")
-    print("Final model saved to", final_model_dir)
-
+        # epoch 終了時のチェックポイント保存
+        final_model_dir = "./KiTitans-MAC-Transformer-0.3B-Instruction"
+        os.makedirs(final_model_dir, exist_ok=True)
+        model_engine.save_checkpoint(final_model_dir, tag=f"epoch-{epoch}-final")
+        print(f"Final model saved to {final_model_dir} at epoch {epoch}")
 
 if __name__ == "__main__":
     main()

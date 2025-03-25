@@ -7,4 +7,4 @@ Pretrain/data/hf_datasets_pretrain_train/
 Pretrain/checkpoints
 Pretrain/wandb
 Pretrain/data
-Pretrain/KiTitans-MAC-Transformer-0.3B-base-SyntheticText
+Pretrain/KiTitans-MAC-Transformer**
